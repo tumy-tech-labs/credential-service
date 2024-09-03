@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: cred-service
+      POSTGRES_PASSWORD: cred-service-1
+      POSTGRES_DB: credential-service
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - cred-net
+
+  did-service:
+    build:
+      context: ./did-service
+    container_name: did-service
+    environment:
+      DATABASE_URL: postgres://cred-service:cred-service-1@postgres:5432/credential-service
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - cred-net
+
+
+networks:
+  cred-net:
+
+volumes:
+  postgres_data:
+
