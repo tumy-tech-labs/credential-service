@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -27,44 +29,68 @@ func initDB() {
 }
 
 func createCredential(w http.ResponseWriter, r *http.Request) {
-	// Sample data for the credential
-	credentialID := uuid.New().String()
-	name := r.URL.Query().Get("name")
-	email := r.URL.Query().Get("email")
-	phone := r.URL.Query().Get("phone")
-	issueDate := time.Now().UTC().Format(time.RFC3339)
-	expirationDate := time.Now().Add(365 * 24 * time.Hour).UTC().Format(time.RFC3339)
-
-	// Construct the VC as per W3C VC specification
-	vc := map[string]interface{}{
-		"@context": "https://www.w3.org/2018/credentials/v1",
-		"type":     []string{"VerifiableCredential", "EmploymentCredential"},
-		"id":       credentialID,
-		"issuer":   "did:example:issuer", // Replace with actual DID
-		"credentialSubject": map[string]string{
-			"id":    "did:example:subject", // Replace with actual DID
-			"name":  name,
-			"email": email,
-			"phone": phone,
-		},
-		"issuanceDate":   issueDate,
-		"expirationDate": expirationDate,
-	}
-
-	// Sign the VC (stubbed logic)
-	// In production, you would sign this with the issuer's private key
-	signedVC := vc // Here you'd apply signing logic
-
-	// Respond with the signed VC
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(signedVC)
+	// Generate a new Ed25519 key pair
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		log.Printf("Failed to encode response: %v", err)
-		http.Error(w, "Failed to create VC", http.StatusInternalServerError)
+		log.Printf("Failed to generate key pair: %v", err)
+		http.Error(w, "Failed to create credential", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("VC created successfully: %s", credentialID)
+	// Store the privateKey for future use
+	_ = privateKey // Acknowledge the privateKey variable to avoid the "declared and not used" error
+
+	// Encode the public key
+	encodedPublicKey := fmt.Sprintf("z6M%s", base64.RawURLEncoding.EncodeToString(publicKey))
+
+	// Create a new credential ID
+	credentialID := uuid.New().String()
+
+	// Generate issuance date and expiration date
+	issuanceDate := time.Now().UTC().Format(time.RFC3339)
+	expirationDate := time.Now().AddDate(1, 0, 0).UTC().Format(time.RFC3339)
+
+	// Read the request body for subject details
+	var payload map[string]interface{}
+	err = json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	// Extract subject details from the payload
+	subject, ok := payload["subject"].(map[string]interface{})
+	if !ok {
+		http.Error(w, "Invalid or missing 'subject' field", http.StatusBadRequest)
+		return
+	}
+
+	// Create the credential
+	credential := map[string]interface{}{
+		"@context":       "https://www.w3.org/2018/credentials/v1",
+		"id":             credentialID,
+		"type":           []string{"VerifiableCredential", "EmploymentCredential"},
+		"issuer":         "did:key:" + encodedPublicKey, // Use the encoded public key as the issuer's DID
+		"issuanceDate":   issuanceDate,
+		"expirationDate": expirationDate,
+		"credentialSubject": map[string]interface{}{
+			"id":    "did:key:" + encodedPublicKey, // Replace with the subject's DID as needed
+			"name":  subject["name"],
+			"email": subject["email"],
+			"phone": subject["phone"],
+		},
+	}
+
+	// Respond with the created credential
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(credential)
+	if err != nil {
+		log.Printf("Failed to encode response: %v", err)
+		http.Error(w, "Failed to create credential", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Credential created successfully: %s", credentialID)
 }
 
 func main() {
@@ -77,6 +103,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("VC Issuance Service running on port %s\n", port)
+	log.Printf("Issuer Service running on port %s\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 }
