@@ -65,6 +65,9 @@ func createCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Generate a unique ID for the credential subject
+	subjectID := uuid.New().String()
+
 	// Create the credential
 	credential := map[string]interface{}{
 		"@context":       "https://www.w3.org/2018/credentials/v1",
@@ -74,7 +77,7 @@ func createCredential(w http.ResponseWriter, r *http.Request) {
 		"issuanceDate":   issuanceDate,
 		"expirationDate": expirationDate,
 		"credentialSubject": map[string]interface{}{
-			"id":    "did:key:" + encodedPublicKey, // Replace with the subject's DID as needed
+			"id":    "did:key:" + subjectID, // Generate a new unique ID for the subject
 			"name":  subject["name"],
 			"email": subject["email"],
 			"phone": subject["phone"],
