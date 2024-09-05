@@ -29,10 +29,11 @@ func initDB() {
 
 // DID Document structure
 type DIDDocument struct {
-	Context   string `json:"@context"`
-	ID        string `json:"id"`
-	PublicKey string `json:"publicKey"`
-	CreatedAt string `json:"createdAt"`
+	Context        string `json:"@context"`
+	ID             string `json:"id"`
+	PublicKey      string `json:"publicKey"`
+	CreatedAt      string `json:"createdAt"`
+	OrganizationID string `json:"organization_id"` // Add this field
 }
 
 // Create a new DID and store the DID document in the database
@@ -48,17 +49,30 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 	// Encode the public key in base64
 	encodedPublicKey := base64.RawURLEncoding.EncodeToString(publicKey)
 
+	// Extract organization_id from the request payload
+	var payload map[string]interface{}
+	err = json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	organizationID, ok := payload["organization_id"].(string)
+	if !ok {
+		organizationID = "default-org" // Fallback value if not provided
+	}
+
 	// Construct the DID
 	did := fmt.Sprintf("did:key:z6M%s", encodedPublicKey)
-	organizationID := "default-org" // Replace with actual organization ID
 	createdAt := time.Now().UTC()
 
 	// Create the DID Document
 	didDocument := DIDDocument{
-		Context:   "https://www.w3.org/ns/did/v1",
-		ID:        did,
-		PublicKey: encodedPublicKey,
-		CreatedAt: createdAt.Format(time.RFC3339),
+		Context:        "https://www.w3.org/ns/did/v1",
+		ID:             did,
+		PublicKey:      encodedPublicKey,
+		CreatedAt:      createdAt.Format(time.RFC3339),
+		OrganizationID: organizationID, // Include organization_id
 	}
 
 	// Convert the DID document to JSON for storage
