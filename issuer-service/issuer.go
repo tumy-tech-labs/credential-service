@@ -50,6 +50,7 @@ type Credential struct {
 	ExpirationDate time.Time `json:"expirationDate"`
 }
 
+// IssueCredential issues a new credential
 func issueCredential(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -133,7 +134,13 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Credential issued successfully: %v", credential)
 }
 
+// getCredentials retrieves all credentials from the database
 func getCredentials(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	// Query to retrieve all credentials from the database
 	rows, err := db.Query(context.Background(), "SELECT id, issuer, credential, issuance_date, expiration_date FROM verifiable_credentials")
 	if err != nil {
