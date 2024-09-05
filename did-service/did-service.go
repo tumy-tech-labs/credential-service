@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -134,6 +135,32 @@ func getDIDs(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Retrieved %d DIDs", len(dids))
 }
 
+func getDID(w http.ResponseWriter, r *http.Request) {
+	did := r.URL.Query().Get("did")
+	if did == "" {
+		http.Error(w, "Missing DID", http.StatusBadRequest)
+		return
+	}
+
+	// Query to retrieve a specific DID document from the database
+	var document string
+	err := db.QueryRow(context.Background(), "SELECT document FROM dids WHERE did = $1", did).Scan(&document)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			http.Error(w, "DID not found", http.StatusNotFound)
+		} else {
+			log.Printf("Failed to execute query: %v", err)
+			http.Error(w, "Failed to retrieve DID", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Respond with the DID document
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(document))
+	log.Printf("Retrieved DID document: %s", did)
+}
+
 func main() {
 	_ = godotenv.Load()
 	initDB()
@@ -143,6 +170,14 @@ func main() {
 			createDID(w, r)
 		} else if r.Method == http.MethodGet {
 			getDIDs(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	http.HandleFunc("/dids/resolver", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			getDID(w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
