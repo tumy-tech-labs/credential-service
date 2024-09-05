@@ -1,9 +1,11 @@
 -- Create DID management table
 CREATE TABLE IF NOT EXISTS dids (
     id SERIAL PRIMARY KEY,
-    did VARCHAR(255) UNIQUE NOT NULL,          -- Decentralized Identifier
-    organization_id VARCHAR(255),              -- Organization-specific identifier
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Timestamp of creation
+    did TEXT NOT NULL,
+    organization_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    public_key TEXT,  -- Add this column
+    document JSONB NOT NULL  -- Store DID document as JSONB
 );
 
 -- Create DID document storage table
