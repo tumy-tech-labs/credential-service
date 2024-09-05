@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -29,20 +27,6 @@ func initDB() {
 }
 
 func createCredential(w http.ResponseWriter, r *http.Request) {
-	// Generate a new Ed25519 key pair
-	publicKey, privateKey, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		log.Printf("Failed to generate key pair: %v", err)
-		http.Error(w, "Failed to create credential", http.StatusInternalServerError)
-		return
-	}
-
-	// Store the privateKey for future use
-	_ = privateKey // Acknowledge the privateKey variable to avoid the "declared and not used" error
-
-	// Encode the public key
-	encodedPublicKey := fmt.Sprintf("z6M%s", base64.RawURLEncoding.EncodeToString(publicKey))
-
 	// Create a new credential ID
 	credentialID := uuid.New().String()
 
@@ -50,11 +34,18 @@ func createCredential(w http.ResponseWriter, r *http.Request) {
 	issuanceDate := time.Now().UTC().Format(time.RFC3339)
 	expirationDate := time.Now().AddDate(1, 0, 0).UTC().Format(time.RFC3339)
 
-	// Read the request body for subject details
+	// Read the request body for subject details and issuer DID
 	var payload map[string]interface{}
-	err = json.NewDecoder(r.Body).Decode(&payload)
+	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	// Extract issuer DID from the payload
+	issuerDid, ok := payload["issuerDid"].(string)
+	if !ok {
+		http.Error(w, "Invalid or missing 'issuerDid' field", http.StatusBadRequest)
 		return
 	}
 
@@ -73,7 +64,7 @@ func createCredential(w http.ResponseWriter, r *http.Request) {
 		"@context":       "https://www.w3.org/2018/credentials/v1",
 		"id":             credentialID,
 		"type":           []string{"VerifiableCredential", "EmploymentCredential"},
-		"issuer":         "did:key:" + encodedPublicKey, // Use the encoded public key as the issuer's DID
+		"issuer":         issuerDid, // Use the issuer DID from the payload
 		"issuanceDate":   issuanceDate,
 		"expirationDate": expirationDate,
 		"credentialSubject": map[string]interface{}{
@@ -106,6 +97,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Issuer Service running on port %s\n", port)
+	log.Printf("Credential Service running on port %s\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 }
