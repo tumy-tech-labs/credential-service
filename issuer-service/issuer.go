@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/google/uuid" // Import the UUID package
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -26,88 +27,115 @@ func initDB() {
 	}
 }
 
-func createCredential(w http.ResponseWriter, r *http.Request) {
-	// Generate issuance date and expiration date
-	issuanceDate := time.Now().UTC()
-	expirationDate := issuanceDate.AddDate(1, 0, 0).UTC()
+// Credential structure for incoming POST requests
+type CredentialRequest struct {
+	IssuerDid string `json:"issuerDid"`
+	Subject   struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+	} `json:"subject"`
+}
 
-	// Read the request body for subject details and issuer DID
-	var payload map[string]interface{}
-	err := json.NewDecoder(r.Body).Decode(&payload)
-	if err != nil {
+// Credential structure for responses
+type Credential struct {
+	ID      string `json:"id"`
+	Issuer  string `json:"issuer"`
+	Subject struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+	} `json:"subject"`
+	IssuanceDate   time.Time `json:"issuanceDate"`
+	ExpirationDate time.Time `json:"expirationDate"`
+}
+
+func issueCredential(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Decode the request body
+	var req CredentialRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Failed to decode request body: %v", err)
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// Extract issuer DID from the payload
-	issuerDid, ok := payload["issuerDid"].(string)
-	if !ok {
-		http.Error(w, "Invalid or missing 'issuerDid' field", http.StatusBadRequest)
+	// Resolve the issuer DID
+	resolverURL := fmt.Sprintf("http://did-service:8080/dids/resolver?did=%s", url.QueryEscape(req.IssuerDid))
+	resp, err := http.Get(resolverURL)
+	if err != nil {
+		log.Printf("Failed to fetch DID document from resolver: %v", err)
+		http.Error(w, "Failed to resolve DID", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Received non-OK response from resolver: %s", resp.Status)
+		http.Error(w, "Failed to resolve DID", http.StatusInternalServerError)
 		return
 	}
 
-	// Extract subject details from the payload
-	subject, ok := payload["subject"].(map[string]interface{})
-	if !ok {
-		http.Error(w, "Invalid or missing 'subject' field", http.StatusBadRequest)
+	// Process the DID document
+	var didDocument map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&didDocument); err != nil {
+		log.Printf("Failed to decode DID document: %v", err)
+		http.Error(w, "Failed to process DID document", http.StatusInternalServerError)
 		return
 	}
 
-	// Generate a unique ID for the credential
-	credentialID := uuid.New()
-
-	// Generate a unique ID for the credential subject
-	subjectDid := fmt.Sprintf("did:key:%s", uuid.New().String())
-
-	// Create the credential JSON
-	credential := map[string]interface{}{
-		"@context":       "https://www.w3.org/2018/credentials/v1",
-		"id":             credentialID.String(),
-		"type":           []string{"VerifiableCredential", "EmploymentCredential"},
-		"issuer":         issuerDid,
-		"issuanceDate":   issuanceDate.Format(time.RFC3339),
-		"expirationDate": expirationDate.Format(time.RFC3339),
-		"credentialSubject": map[string]interface{}{
-			"id":    subjectDid,
-			"name":  subject["name"],
-			"email": subject["email"],
-			"phone": subject["phone"],
-		},
+	// Generate a UUID for the credential ID
+	credentialID := uuid.New().String()
+	credential := Credential{
+		ID:             credentialID,
+		Issuer:         req.IssuerDid,
+		Subject:        req.Subject,
+		IssuanceDate:   time.Now().UTC(),
+		ExpirationDate: time.Now().UTC().Add(365 * 24 * time.Hour),
 	}
 
-	// Convert credential to JSON
+	// Serialize the credential to JSON
 	credentialJSON, err := json.Marshal(credential)
 	if err != nil {
-		log.Printf("Failed to marshal credential: %v", err)
-		http.Error(w, "Failed to create credential", http.StatusInternalServerError)
+		log.Printf("Failed to marshal credential to JSON: %v", err)
+		http.Error(w, "Failed to process credential", http.StatusInternalServerError)
 		return
 	}
 
-	// Insert the credential into the database
-	query := `INSERT INTO verifiable_credentials (id, did, issuer, credential, issuance_date, expiration_date) 
-	          VALUES ($1, $2, $3, $4, $5, $6)`
-	_, err = db.Exec(context.Background(), query, credentialID, subjectDid, issuerDid, credentialJSON, issuanceDate, expirationDate)
+	// Store the credential in the database
+	_, err = db.Exec(context.Background(),
+		"INSERT INTO verifiable_credentials (id, did, issuer, credential, issuance_date, expiration_date) VALUES ($1, $2, $3, $4, $5, $6)",
+		credential.ID,
+		"", // Assuming the DID of the subject is not in the payload; adjust if needed
+		req.IssuerDid,
+		credentialJSON,
+		credential.IssuanceDate,
+		credential.ExpirationDate,
+	)
 	if err != nil {
-		log.Printf("Failed to execute query: %v", err)
-		http.Error(w, "Failed to create credential", http.StatusInternalServerError)
+		log.Printf("Failed to insert credential into database: %v", err)
+		http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
 		return
 	}
 
-	// Respond with the created credential
+	// Respond with the generated credential
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(credential)
-	if err != nil {
+	if err := json.NewEncoder(w).Encode(credential); err != nil {
 		log.Printf("Failed to encode response: %v", err)
-		http.Error(w, "Failed to create credential", http.StatusInternalServerError)
+		http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Credential created successfully: %s", credentialID)
+	log.Printf("Credential issued successfully: %v", credential)
 }
 
 func getCredentials(w http.ResponseWriter, r *http.Request) {
 	// Query to retrieve all credentials from the database
-	rows, err := db.Query(context.Background(), "SELECT id, did, issuer, credential, issuance_date, expiration_date FROM verifiable_credentials")
+	rows, err := db.Query(context.Background(), "SELECT id, issuer, credential, issuance_date, expiration_date FROM verifiable_credentials")
 	if err != nil {
 		log.Printf("Failed to execute query: %v", err)
 		http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
@@ -115,37 +143,39 @@ func getCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	// Collect all credentials into a slice of maps
+	// Collect credentials into a list
 	var credentials []map[string]interface{}
 	for rows.Next() {
-		var id, did, issuer, credentialJSON string
+		var id, issuer string
+		var credential json.RawMessage
 		var issuanceDate, expirationDate time.Time
 
-		if err := rows.Scan(&id, &did, &issuer, &credentialJSON, &issuanceDate, &expirationDate); err != nil {
+		if err := rows.Scan(&id, &issuer, &credential, &issuanceDate, &expirationDate); err != nil {
 			log.Printf("Failed to scan row: %v", err)
 			http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
 			return
 		}
 
-		var credential map[string]interface{}
-		err = json.Unmarshal([]byte(credentialJSON), &credential)
-		if err != nil {
-			log.Printf("Failed to unmarshal credential: %v", err)
-			http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
+		// Unmarshal the credential JSONB field
+		var credentialData map[string]interface{}
+		if err := json.Unmarshal(credential, &credentialData); err != nil {
+			log.Printf("Failed to unmarshal credential data: %v", err)
+			http.Error(w, "Failed to process credential data", http.StatusInternalServerError)
 			return
 		}
 
-		credentials = append(credentials, map[string]interface{}{
+		// Create a combined map for the response
+		cred := map[string]interface{}{
 			"id":             id,
-			"did":            did,
 			"issuer":         issuer,
-			"credential":     credential,
+			"credential":     credentialData,
 			"issuanceDate":   issuanceDate.Format(time.RFC3339),
 			"expirationDate": expirationDate.Format(time.RFC3339),
-		})
+		}
+		credentials = append(credentials, cred)
 	}
 
-	// Respond with the list of credentials
+	// Respond with the credentials
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(credentials); err != nil {
 		log.Printf("Failed to encode response: %v", err)
@@ -160,20 +190,13 @@ func main() {
 	_ = godotenv.Load()
 	initDB()
 
-	http.HandleFunc("/credentials", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			createCredential(w, r)
-		} else if r.Method == http.MethodGet {
-			getCredentials(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	http.HandleFunc("/credentials", issueCredential)
+	http.HandleFunc("/credentials/all", getCredentials)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Credential Service running on port %s\n", port)
+	log.Printf("Issuer Service running on port %s\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 }
