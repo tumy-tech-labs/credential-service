@@ -148,8 +148,18 @@ func getCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Query the database and extract the subject details from the JSON field
 	rows, err := db.Query(context.Background(),
-		"SELECT id, subject_name, subject_email, subject_phone, issue_date, expiration_date, issuer, revoked, revoked_at FROM verifiable_credentials")
+		`SELECT id, 
+			credential->'subject'->>'name' AS subject_name, 
+			credential->'subject'->>'email' AS subject_email, 
+			credential->'subject'->>'phone' AS subject_phone, 
+			issuance_date, 
+			expiration_date, 
+			issuer, 
+			revoked, 
+			revoked_at 
+		FROM verifiable_credentials`)
 	if err != nil {
 		log.Printf("Failed to retrieve credentials: %v", err)
 		http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
@@ -171,6 +181,7 @@ func getCredentials(w http.ResponseWriter, r *http.Request) {
 			revokedAt      *time.Time // Nullable field
 		)
 
+		// Scan the result into the variables
 		err := rows.Scan(&id, &subjectName, &subjectEmail, &subjectPhone, &issueDate, &expirationDate, &issuer, &revoked, &revokedAt)
 		if err != nil {
 			log.Printf("Failed to scan credential: %v", err)
