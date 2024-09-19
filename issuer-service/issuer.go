@@ -27,6 +27,13 @@ func initDB() {
 	}
 }
 
+func closeDB() {
+	if db != nil {
+		db.Close()
+		log.Println("Database connection closed")
+	}
+}
+
 // Credential structure for incoming POST requests
 type CredentialRequest struct {
 	IssuerDid string `json:"issuerDid"`
@@ -134,76 +141,152 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Credential issued successfully: %v", credential)
 }
 
-// getCredentials retrieves all credentials from the database
+// getCredentials retrieves all credentials from the database, including their revocation status
 func getCredentials(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Query to retrieve all credentials from the database
-	rows, err := db.Query(context.Background(), "SELECT id, issuer, credential, issuance_date, expiration_date FROM verifiable_credentials")
+	// Query the database and extract the subject details from the JSON field
+	rows, err := db.Query(context.Background(),
+		`SELECT id, 
+			credential->'subject'->>'name' AS subject_name, 
+			credential->'subject'->>'email' AS subject_email, 
+			credential->'subject'->>'phone' AS subject_phone, 
+			issuance_date, 
+			expiration_date, 
+			issuer, 
+			revoked, 
+			revoked_at 
+		FROM verifiable_credentials`)
 	if err != nil {
-		log.Printf("Failed to execute query: %v", err)
+		log.Printf("Failed to retrieve credentials: %v", err)
 		http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	// Collect credentials into a list
 	var credentials []map[string]interface{}
 	for rows.Next() {
-		var id, issuer string
-		var credential json.RawMessage
-		var issuanceDate, expirationDate time.Time
+		var (
+			id             string
+			subjectName    string
+			subjectEmail   string
+			subjectPhone   string
+			issueDate      time.Time
+			expirationDate time.Time
+			issuer         string
+			revoked        bool
+			revokedAt      *time.Time // Nullable field
+		)
 
-		if err := rows.Scan(&id, &issuer, &credential, &issuanceDate, &expirationDate); err != nil {
-			log.Printf("Failed to scan row: %v", err)
+		// Scan the result into the variables
+		err := rows.Scan(&id, &subjectName, &subjectEmail, &subjectPhone, &issueDate, &expirationDate, &issuer, &revoked, &revokedAt)
+		if err != nil {
+			log.Printf("Failed to scan credential: %v", err)
 			http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
 			return
 		}
 
-		// Unmarshal the credential JSONB field
-		var credentialData map[string]interface{}
-		if err := json.Unmarshal(credential, &credentialData); err != nil {
-			log.Printf("Failed to unmarshal credential data: %v", err)
-			http.Error(w, "Failed to process credential data", http.StatusInternalServerError)
-			return
+		credential := map[string]interface{}{
+			"id":             id,
+			"subjectName":    subjectName,
+			"subjectEmail":   subjectEmail,
+			"subjectPhone":   subjectPhone,
+			"issueDate":      issueDate.Format(time.RFC3339),
+			"expirationDate": expirationDate.Format(time.RFC3339),
+			"issuer":         issuer,
+			"revoked":        revoked,
 		}
 
-		// Create a combined map for the response
-		cred := map[string]interface{}{
-			"id":             id,
-			"issuer":         issuer,
-			"credential":     credentialData,
-			"issuanceDate":   issuanceDate.Format(time.RFC3339),
-			"expirationDate": expirationDate.Format(time.RFC3339),
+		// Add revokedAt if the credential is revoked
+		if revokedAt != nil {
+			credential["revokedAt"] = revokedAt.Format(time.RFC3339)
 		}
-		credentials = append(credentials, cred)
+
+		credentials = append(credentials, credential)
 	}
 
-	// Respond with the credentials
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(credentials); err != nil {
-		log.Printf("Failed to encode response: %v", err)
+	if err = rows.Err(); err != nil {
+		log.Printf("Failed to retrieve credentials: %v", err)
 		http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Retrieved %d credentials", len(credentials))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(credentials)
+}
+
+// revokeCredential handles revoking a credential based on the credential ID and issuer DID
+func revokeCredential(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse the incoming revocation request
+	var request struct {
+		CredentialID string `json:"credentialId"`
+		IssuerDid    string `json:"issuerDid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Validate the existence of the credential and ensure it belongs to the issuer
+	var issuerDid string
+	err := db.QueryRow(context.Background(),
+		"SELECT issuer FROM verifiable_credentials WHERE id = $1", request.CredentialID).Scan(&issuerDid)
+	if err != nil {
+		log.Printf("Credential not found: %v", err)
+		http.Error(w, "Credential not found", http.StatusNotFound)
+		return
+	}
+
+	if issuerDid != request.IssuerDid {
+		log.Printf("Issuer mismatch: expected %v, got %v", issuerDid, request.IssuerDid)
+		http.Error(w, "Issuer mismatch", http.StatusUnauthorized)
+		return
+	}
+
+	// Mark the credential as revoked
+	_, err = db.Exec(context.Background(),
+		"UPDATE verifiable_credentials SET revoked = TRUE, revoked_at = $1 WHERE id = $2", time.Now().UTC(), request.CredentialID)
+	if err != nil {
+		log.Printf("Failed to revoke credential: %v", err)
+		http.Error(w, "Failed to revoke credential", http.StatusInternalServerError)
+		return
+	}
+
+	// Send response
+	response := map[string]interface{}{
+		"message":   "Credential revoked successfully",
+		"revoked":   true,
+		"revokedAt": time.Now().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func main() {
 	_ = godotenv.Load()
 	initDB()
 
+	// Ensure the database connection is closed when the program exits
+	defer closeDB()
+
 	http.HandleFunc("/credentials", issueCredential)
 	http.HandleFunc("/credentials/all", getCredentials)
+	http.HandleFunc("/credentials/revoke", revokeCredential) // New endpoint for revocation
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+
 	log.Printf("Issuer Service running on port %s\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 }
