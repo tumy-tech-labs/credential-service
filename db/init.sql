@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS did_documents (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Timestamp of document creation
 );
 
--- Create verifiable credentials table
+-- Create verifiable credentials table with revocation functionality
 CREATE TABLE IF NOT EXISTS verifiable_credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     did VARCHAR(255) NOT NULL,                 -- DID of the subject (credential holder)
@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS verifiable_credentials (
     issuance_date TIMESTAMP NOT NULL,          -- When the credential was issued
     expiration_date TIMESTAMP NOT NULL,        -- Expiration date of the credential
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp of credential issuance
-    revoked BOOLEAN DEFAULT FALSE              -- Whether the credential is revoked
+    revoked BOOLEAN DEFAULT FALSE,             -- Whether the credential is revoked
+    revocation_reason TEXT,                    -- Reason for revocation (optional)
+    revoked_at TIMESTAMP                       -- Timestamp of when the credential was revoked (optional)
 );
 
 -- Create revocation table (optional, for more detailed tracking)
