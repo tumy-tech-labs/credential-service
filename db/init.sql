@@ -40,3 +40,16 @@ CREATE TABLE IF NOT EXISTS revocation_registry (
     revocation_reason TEXT,                                   -- Reason for revocation
     revoked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP            -- Timestamp of revocation
 );
+
+-- Create extension for UUID in the presentations table
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create presentations table 
+CREATE TABLE IF NOT EXISTS presentations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    credential_id VARCHAR NOT NULL,
+    holder_did VARCHAR NOT NULL,
+    presentation_data JSONB NOT NULL,
+    processing_id VARCHAR NOT NULL UNIQUE
+);
+
