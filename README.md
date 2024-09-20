@@ -21,6 +21,35 @@ A service for creating and managing Verifiable Credentials, including associatin
 - **Dynamic Payloads**: Include issuer DID and subject details in the POST request payload.
 - **REST API**: Expose endpoints for creating and retrieving credentials.
 
+```mermaid
+sequenceDiagram
+    participant Issuer
+    participant DIDService
+    participant IssuerService
+    participant Holder
+    participant PresentationService
+    participant Verifier
+    participant VerificationService
+
+    Issuer->>DIDService: POST /dids (Create DID for Holder)
+    DIDService-->>Issuer: Return DID
+    Issuer->>IssuerService: POST /credentials (Issue Credential with Holder DID)
+    IssuerService-->>Issuer: Return Credential
+    Issuer->>Holder: Send Credential
+    Holder->>PresentationService: POST /presentations (Create Presentation with Credential)
+    PresentationService-->>Holder: Return Presentation ID
+    Holder->>Verifier: Send Presentation ID
+    Verifier->>VerificationService: GET /presentations/{id} (Request Presentation)
+    VerificationService->>PresentationService: Fetch Presentation Data
+    PresentationService-->>VerificationService: Return Presentation Data
+    VerificationService->>DIDService: GET /dids/resolver (Resolve DID)
+    DIDService-->>VerificationService: Return DID Document
+    VerificationService->>VerificationService: Verify Presentation
+    VerificationService-->>Verifier: Return Verification Result
+    Verifier->>Holder: Return Verification Status
+```
+
+
 ## Requirements
 
 - Go 1.19 or higher
