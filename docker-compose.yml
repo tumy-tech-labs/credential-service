@@ -14,6 +14,11 @@ services:
       - "5432:5432"
     networks:
       - cred-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cred-service"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   did-service:
     build:
@@ -35,6 +40,19 @@ services:
     container_name: issuer-service
     ports:
       - "8082:8080"
+    environment:
+      - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
+    depends_on:
+      - postgres
+    networks:
+      - cred-net
+
+  presentation-service:
+    build:
+      context: ./presentation-service
+    container_name: presentation-service
+    ports:
+      - "8083:8080"
     environment:
       - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
     depends_on:
