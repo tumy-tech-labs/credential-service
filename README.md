@@ -61,10 +61,10 @@ Step-by-step instructions on how to install the project.
 
 1. Clone the repository:
 
-   ```bash
-   git clone https://github.com/bradtumy/credential-service.git
-   cd credential-service
-   ```
+  ```bash
+  git clone https://github.com/bradtumy/credential-service.git
+  cd credential-service
+  ```
 
 ## Usage
 
@@ -76,30 +76,42 @@ Step-by-step instructions on how to install the project.
 
 ### Create DID
 
+This is currently limited to creating a DID for Issuers.  When creating the DID it will generate a private and public key and store the private key in a hashicorp vault.
+
+TODO: Create DID's for Holders and Verifiers as well.
+
 **Request:**
+
 ```bash
 curl -X POST http://localhost:8080/dids \
 -H "Content-Type: application/json" \
 -d '{
-  "holder": "did:key:z6MholderDIDhere"
+  "organization_id": "org123"
 }'
 ```
 
 **Response:**
+
 ```json
 {
-  "did": "did:key:z6MnewDIDhere"
+    "@context": "https://www.w3.org/ns/did/v1",
+    "id": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
+    "publicKey": "sjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
+    "createdAt": "2024-09-21T21:57:13Z",
+    "organization_id": "org123"
 }
 ```
 
 ### Resolve DID
 
 **Request:**
+
 ```bash
 curl -X GET http://localhost:8080/dids/resolver?did=did:key:z6MnewDIDhere
 ```
 
 **Response:**
+
 ```json
 {
   "did": "did:key:z6MnewDIDhere",
@@ -109,7 +121,10 @@ curl -X GET http://localhost:8080/dids/resolver?did=did:key:z6MnewDIDhere
 
 ### Issue Credentials
 
+When Issuing the credentials, provide the DID that you created in the previous steps.
+
 **Request Payload:**
+
 ```json
 {
   "issuerDid": "did:key:z6MyourIssuerDIDhere",
@@ -122,6 +137,7 @@ curl -X GET http://localhost:8080/dids/resolver?did=did:key:z6MnewDIDhere
 ```
 
 **Example Request:**
+
 ```bash
 curl -X POST http://localhost:8080/credentials \
 -H "Content-Type: application/json" \
@@ -136,6 +152,7 @@ curl -X POST http://localhost:8080/credentials \
 ```
 
 **Response:**
+
 ```json
 {
   "@context": "https://www.w3.org/2018/credentials/v1",
@@ -156,12 +173,16 @@ curl -X POST http://localhost:8080/credentials \
 
 ### Get All Credentials
 
+This is currently not working.
+
 **Request:**
+
 ```bash
 curl -X GET http://localhost:8080/credentials
 ```
 
 **Response:**
+
 ```json
 [
   {
@@ -179,11 +200,13 @@ curl -X GET http://localhost:8080/credentials
 ### Revoke Credentials
 
 **Request:**
+
 ```bash
 curl -X DELETE http://localhost:8080/credentials/credential-id
 ```
 
 **Response:**
+
 ```json
 {
   "message": "Credential revoked successfully."
@@ -193,6 +216,7 @@ curl -X DELETE http://localhost:8080/credentials/credential-id
 ### Create Presentation
 
 **Request:**
+
 ```bash
 curl -X POST http://localhost:8080/presentations \
 -H "Content-Type: application/json" \
@@ -203,6 +227,7 @@ curl -X POST http://localhost:8080/presentations \
 ```
 
 **Response:**
+
 ```json
 {
   "presentationId": "presentation-id"
@@ -212,11 +237,13 @@ curl -X POST http://localhost:8080/presentations \
 ### Get Presentation
 
 **Request:**
+
 ```bash
 curl -X GET http://localhost:8080/presentations/presentation-id
 ```
 
 **Response:**
+
 ```json
 {
   "presentationId": "presentation-id",
@@ -227,11 +254,13 @@ curl -X GET http://localhost:8080/presentations/presentation-id
 ### Verification Service
 
 **Request:**
+
 ```bash
 curl -X GET http://localhost:8080/verifications/presentation-id
 ```
 
 **Response:**
+
 ```json
 {
   "presentationId": "presentation-id",
@@ -268,6 +297,7 @@ VAULT_TOKEN=your-vault-token
 Instructions for running tests, if applicable.
 
 **Example:**
+
 ```bash
 go test ./...
 ```
