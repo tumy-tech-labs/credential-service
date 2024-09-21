@@ -19,7 +19,7 @@ A service for creating and managing Verifiable Credentials, including associatin
 - **Create Verifiable Credentials**: Issue credentials with unique IDs, expiration dates, and digital signatures.
 - **Manage DIDs**: Integrate with the DID management service to use existing DIDs as issuers.
 - **Dynamic Payloads**: Include issuer DID and subject details in the POST request payload.
-- **REST API**: Expose endpoints for creating and retrieving credentials.
+- **REST API**: Expose endpoints for creating, retrieving, and revoking credentials.
 
 ```mermaid
 sequenceDiagram
@@ -49,7 +49,6 @@ sequenceDiagram
     Verifier->>Holder: Return Verification Status
 ```
 
-
 ## Requirements
 
 - Go 1.19 or higher
@@ -63,12 +62,54 @@ Step-by-step instructions on how to install the project.
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-username/credential-service.git
+   git clone https://github.com/bradtumy/credential-service.git
    cd credential-service
    ```
 
-### Request Payload
+## Usage
 
+1. Start up in Docker
+  
+  ```bash
+  docker compose up -d --build
+  ```
+
+### Create DID
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/dids \
+-H "Content-Type: application/json" \
+-d '{
+  "holder": "did:key:z6MholderDIDhere"
+}'
+```
+
+**Response:**
+```json
+{
+  "did": "did:key:z6MnewDIDhere"
+}
+```
+
+### Resolve DID
+
+**Request:**
+```bash
+curl -X GET http://localhost:8080/dids/resolver?did=did:key:z6MnewDIDhere
+```
+
+**Response:**
+```json
+{
+  "did": "did:key:z6MnewDIDhere",
+  "document": { ... } // DID Document details
+}
+```
+
+### Issue Credentials
+
+**Request Payload:**
 ```json
 {
   "issuerDid": "did:key:z6MyourIssuerDIDhere",
@@ -80,8 +121,7 @@ Step-by-step instructions on how to install the project.
 }
 ```
 
-### Example Request
-
+**Example Request:**
 ```bash
 curl -X POST http://localhost:8080/credentials \
 -H "Content-Type: application/json" \
@@ -95,8 +135,7 @@ curl -X POST http://localhost:8080/credentials \
 }'
 ```
 
-### Response
-
+**Response:**
 ```json
 {
   "@context": "https://www.w3.org/2018/credentials/v1",
@@ -110,48 +149,146 @@ curl -X POST http://localhost:8080/credentials \
     "name": "Jane Doe",
     "email": "jane.doe@example.com",
     "phone": "+3214567890"
-  }
+  },
+  "signature": "i9CASyhzQD1nDL/gpzacq0etT5jCAuH7MPHYU9WA7p/0yrirtD2Y4Mdg8G8dEr6kMgqenpWt5MP/5MaYkhUtDg=="
 }
 ```
+
+### Get All Credentials
+
+**Request:**
+```bash
+curl -X GET http://localhost:8080/credentials
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "credential-id",
+    "issuer": "did:key:z6MyourIssuerDIDhere",
+    "subject": { ... },
+    "issuanceDate": "2024-09-05T00:00:00Z",
+    "expirationDate": "2025-09-05T00:00:00Z",
+    "signature": "signature-value"
+  },
+  ...
+]
+```
+
+### Revoke Credentials
+
+**Request:**
+```bash
+curl -X DELETE http://localhost:8080/credentials/credential-id
+```
+
+**Response:**
+```json
+{
+  "message": "Credential revoked successfully."
+}
+```
+
+### Create Presentation
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/presentations \
+-H "Content-Type: application/json" \
+-d '{
+  "holderDid": "did:key:z6MholderDIDhere",
+  "credentials": ["credential-id"]
+}'
+```
+
+**Response:**
+```json
+{
+  "presentationId": "presentation-id"
+}
+```
+
+### Get Presentation
+
+**Request:**
+```bash
+curl -X GET http://localhost:8080/presentations/presentation-id
+```
+
+**Response:**
+```json
+{
+  "presentationId": "presentation-id",
+  "credentials": [ ... ]
+}
+```
+
+### Verification Service
+
+**Request:**
+```bash
+curl -X GET http://localhost:8080/verifications/presentation-id
+```
+
+**Response:**
+```json
+{
+  "presentationId": "presentation-id",
+  "verificationStatus": "verified"
+}
+```
+
+### Testing the Vault Connection
+
+To test the connection to Vault, you can run the following command inside your Docker container:
+
+```bash
+curl -X GET http://localhost:8200/v1/sys/health \
+-H "X-Vault-Token: your-vault-token"
+```
+
+Replace `your-vault-token` with your actual Vault token. A successful response will confirm that the Vault service is healthy.
 
 ## Configuration
 
 Details about any configuration options (e.g., environment variables, config files).
 
-Environment Variables:
+**Environment Variables:**
 
 ```bash
 DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
 PORT=8080
+VAULT_ADDR=http://vault:8200
+VAULT_TOKEN=your-vault-token
 ```
 
 ## Testing
 
 Instructions for running tests, if applicable.
 
-Example:
-
-bash
-Copy code
+**Example:**
+```bash
 go test ./...
+```
 
 ## Contributing
 
-Explain how others can contribute to the project.
+How others can contribute to the project.
 
-Fork the repository.
-Create a new branch (git checkout -b feature-branch).
-Commit your changes (git commit -am 'Add new feature').
-Push the branch (git push origin feature-branch).
-Open a Pull Request.
+1. Fork the repository.
+2. Create a new branch (git checkout -b feature-branch).
+3. Commit your changes (git commit -am 'Add new feature').
+4. Push the branch (git push origin feature-branch).
+5. Open a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache2 License - see the LICENSE file for details.
 
 ## Contact
 
-How to reach you for support or issues.
+How to connect for support or issues.
 
-Email: <your.email@example.com>
-GitHub: your-username
+Email: <brad@tumy-tech.com>  
+GitHub: bradtumy
