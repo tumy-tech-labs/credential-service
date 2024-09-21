@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS verifiable_credentials (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp of credential issuance
     revoked BOOLEAN DEFAULT FALSE,             -- Whether the credential is revoked
     revocation_reason TEXT,                    -- Reason for revocation (optional)
-    revoked_at TIMESTAMP                       -- Timestamp of when the credential was revoked (optional)
+    revoked_at TIMESTAMP,                      -- Timestamp of when the credential was revoked (optional)
+    signature TEXT                             -- Signature of issuer
 );
 
 -- Create revocation table (optional, for more detailed tracking)

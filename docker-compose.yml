@@ -27,6 +27,8 @@ services:
     environment:
       DATABASE_URL: postgres://cred-service:cred-service-1@postgres:5432/credential-service
       PORT: 8080
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: root
     ports:
       - "8080:8080"
     depends_on:
@@ -42,6 +44,8 @@ services:
       - "8082:8080"
     environment:
       - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=root
     depends_on:
       - postgres
     networks:
@@ -72,6 +76,26 @@ services:
       - postgres
     networks:
       - cred-net
+  
+  # Add HashiCorp Vault service
+  vault:
+    image: vault:1.13.1
+    container_name: vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root  # Development-only token
+      VAULT_ADDR: http://127.0.0.1:8200
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - cred-net
+    volumes:
+      - ./vault:/vault/file  # Optional, for persisting Vault data in development
+    command: server -dev  # Dev mode for testing, use production settings later
+    depends_on:
+      - postgres
+
 
 networks:
   cred-net:
