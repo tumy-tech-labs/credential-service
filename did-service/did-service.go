@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/hashicorp/vault/api"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joho/godotenv"
@@ -26,6 +27,21 @@ func initDB() {
 	} else {
 		log.Println("Connected to database successfully")
 	}
+}
+
+func getVaultClient() (*api.Client, error) {
+	config := api.DefaultConfig()
+	err := config.ReadEnvironment()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Vault environment: %w", err)
+	}
+
+	client, err := api.NewClient(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Vault client: %w", err)
+	}
+
+	return client, nil
 }
 
 // DID Document structure
@@ -49,6 +65,9 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 
 	// Encode the public key in base64
 	encodedPublicKey := base64.RawURLEncoding.EncodeToString(publicKey)
+
+	// Convert ed25519.PrivateKey to base64 string
+	encodedPrivateKey := base64.StdEncoding.EncodeToString(privateKey)
 
 	// Extract organization_id from the request payload
 	var payload map[string]interface{}
@@ -94,12 +113,18 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Securely store the private key (stubbed out for now)
-	log.Printf("Private key for DID %s: %x", did, privateKey)
+	log.Printf("Private key for DID %s: %x", did, encodedPrivateKey)
+	// Save the private key to Vault
+	err = savePrivateKeyToVault(did, encodedPrivateKey)
+	if err != nil {
+		log.Printf("error creating private key %s", err)
+	}
 
 	// Respond with the DID document
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(didDocJSON)
 	log.Printf("DID created successfully: %s", did)
+
 }
 
 func getDIDs(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +184,29 @@ func getDID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(document))
 	log.Printf("Retrieved DID document: %s", did)
+}
+
+func savePrivateKeyToVault(did string, privateKey string) error {
+	client, err := getVaultClient()
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize Vault client: %w", err)
+	}
+
+	data := map[string]interface{}{
+		"data": map[string]interface{}{
+			"private_key": privateKey,
+		},
+	}
+
+	// Write the private key to Vault at the path "secret/data/dids/<did>"
+	secretPath := fmt.Sprintf("secret/data/dids/%s", did)
+	_, err = client.Logical().Write(secretPath, data)
+	if err != nil {
+		return fmt.Errorf("failed to write private key to Vault: %w", err)
+	}
+
+	return nil
 }
 
 func main() {
