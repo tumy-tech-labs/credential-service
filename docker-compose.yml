@@ -76,6 +76,15 @@ services:
       - postgres
     networks:
       - cred-net
+
+  holder-service:
+    build:
+      context: ./holder-service
+    container_name: holder-service
+    ports:
+      - "8085:8080"
+    networks:
+      - cred-net
   
   # Add HashiCorp Vault service
   vault:
