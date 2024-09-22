@@ -292,6 +292,85 @@ VAULT_ADDR=http://vault:8200
 VAULT_TOKEN=your-vault-token
 ```
 
+## Holder Service
+
+The Holder Service is a microservice responsible for receiving, storing, and presenting verifiable credentials issued by the Issuer Service. It ensures compliance with W3C standards and provides an API for interaction with the credentials.
+
+### Features
+
+- **Receive Credentials**: Accepts verifiable credentials from the Issuer Service and stores them in memory.
+- **Present Credentials**: Allows users to present stored credentials for verification to third parties.
+- **Validation**: Validates incoming credentials to ensure they meet required standards.
+
+### API Endpoints
+
+#### 1. Receive Credential
+
+- **Endpoint**: `/holder/receive`
+- **Method**: `POST`
+- **Description**: Receives a verifiable credential and stores it in memory.
+- **Request Body**:
+  ```json
+  {
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1"
+    ],
+    "type": [
+      "VerifiableCredential"
+    ],
+    "id": "string",
+    "issuer": "string",
+    "issuanceDate": "string",
+    "expirationDate": "string",
+    "credentialSubject": {
+      "email": "string",
+      "id": "string",
+      "name": "string",
+      "phone": "string"
+    },
+    "proof": {
+      "type": "string",
+      "created": "string",
+      "proofValue": "string",
+      "proofPurpose": "string",
+      "verificationMethod": "string"
+    }
+  }
+  ```
+
+#### 2. Present Credential
+
+- **Endpoint**: `/holder/present`
+- **Method**: `GET`
+- **Description**: Presents all stored credentials for verification.
+- **Response**:
+  - Returns an array of stored credentials.
+
+### Getting Started
+
+1. **Run the Holder Service**:
+   Ensure Docker is running and use the following command to start the service:
+   ```bash
+   docker-compose up --build
+   ```
+
+2. **Test the API**:
+   Use tools like `curl` or Postman to interact with the API:
+   - To receive a credential:
+     ```bash
+     curl -X POST http://localhost:8082/holder/receive -d '{"your":"data"}' -H "Content-Type: application/json"
+     ```
+   - To present stored credentials:
+     ```bash
+     curl -X GET http://localhost:8082/holder/present
+     ```
+
+### Notes
+
+- The Holder Service currently stores credentials in memory for simplicity. Future implementations may include persistent storage.
+- Ensure that the service adheres to W3C standards for verifiable credentials.
+
+
 ## Testing
 
 Instructions for running tests, if applicable.
