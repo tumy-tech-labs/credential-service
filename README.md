@@ -384,6 +384,119 @@ Instructions for running tests, if applicable.
 go test ./...
 ```
 
+Here's an updated section for the `README.md` that covers the new Verifier service:
+
+---
+
+## Verifier Service
+
+The **Verifier Service** is responsible for validating Verifiable Presentations (VPs) received from the Holder Service. It ensures the authenticity and integrity of the Verifiable Credentials (VCs) within the VP and verifies the proofs attached by both the issuer and the holder. This service adheres to the W3C standards for Verifiable Credentials and Verifiable Presentations.
+
+### Key Features
+
+- Accepts Verifiable Presentations (VPs) from the Holder.
+- Validates the signature (proof) from both the holder and issuer.
+- Checks the integrity of the Verifiable Credential (VC), including expiration and issuer authenticity.
+- Built as a microservice to integrate into the credential verification ecosystem.
+
+### API Endpoints
+
+#### 1. `POST /verifier/verify`
+
+This endpoint receives a Verifiable Presentation (VP) from the Holder service and validates the included Verifiable Credentials.
+
+- **Request**
+  The payload is a JSON object containing a Verifiable Presentation (VP). The VP includes one or more Verifiable Credentials (VCs) issued by an issuer and presented by the holder.
+  
+  Example Request Payload:
+
+  ```json
+  {
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    "type": ["VerifiablePresentation"],
+    "verifiableCredential": [
+      {
+        "@context": ["https://www.w3.org/2018/credentials/v1"],
+        "type": ["VerifiableCredential"],
+        "id": "977a9b78-f48b-4d50-a847-10b33b802877",
+        "issuer": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
+        "issuanceDate": "2024-09-21T21:57:25Z",
+        "expirationDate": "2025-09-21T21:57:25Z",
+        "credentialSubject": {
+          "id": "did:example:1dab09d7-9dee-4013-8812-fc401794c672",
+          "email": "johndoe@example.com",
+          "name": "John Doe",
+          "phone": "+1234567890"
+        },
+        "proof": {
+          "type": "Ed25519Signature2018",
+          "created": "2024-09-21T21:57:25Z",
+          "proofValue": "U0lHTkFUVVJF",
+          "proofPurpose": "assertionMethod",
+          "verificationMethod": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4#keys-1"
+        }
+      }
+    ],
+    "holder": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
+    "proof": {
+      "type": "Ed25519Signature2018",
+      "created": "2024-09-21T22:05:30Z",
+      "proofPurpose": "authentication",
+      "verificationMethod": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4#keys-1",
+      "proofValue": "SOME_PROOF_SIGNATURE"
+    }
+  }
+  ```
+
+- **Response**:
+  The response will indicate whether the presentation and credentials were successfully verified or not.
+
+  Example Success Response:
+
+  ```json
+  {
+    "status": "success",
+    "message": "Verifiable Presentation and Credentials are valid."
+  }
+  ```
+
+  Example Failure Response:
+
+  ```json
+  {
+    "status": "error",
+    "message": "Invalid signature or credential."
+  }
+  ```
+
+### Running the Verifier Service
+
+1. **Starting the Service**:
+   You can start the verifier service using Docker by building the container as specified in the `docker-compose.yml` file. The service listens on port `8083` by default.
+
+2. **Sending a Verification Request**:
+To send a Verifiable Presentation for verification, you can use `curl` or any HTTP client:
+
+   ```bash
+   curl -X POST http://localhost:8083/verifier/verify \
+   -H "Content-Type: application/json" \
+   -d '{
+       "@context": ["https://www.w3.org/2018/credentials/v1"],
+       "type": ["VerifiablePresentation"],
+       "verifiableCredential": [ ... ],
+       "holder": "did:key:holderDID",
+       "proof": { ... }
+   }'
+   ```
+
+3. **Debugging**:
+
+The verifier service includes basic logging for tracking verification attempts and their outcomes. Use the logs to troubleshoot failed verifications.
+
+### W3C Compliance
+
+The Verifier Service is designed in compliance with the [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) and [Verifiable Presentations](https://www.w3.org/TR/vc-data-model/#presentations-0) standards.
+
 ## Contributing
 
 How others can contribute to the project.
