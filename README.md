@@ -296,8 +296,6 @@ VAULT_TOKEN=your-vault-token
 
 The Holder Service is a microservice responsible for receiving, storing, and presenting verifiable credentials issued by the Issuer Service. It ensures compliance with W3C standards and provides an API for interaction with the credentials.
 
-### Features
-
 - **Receive Credentials**: Accepts verifiable credentials from the Issuer Service and stores them in memory.
 - **Present Credentials**: Allows users to present stored credentials for verification to third parties.
 - **Validation**: Validates incoming credentials to ensure they meet required standards.
@@ -310,6 +308,7 @@ The Holder Service is a microservice responsible for receiving, storing, and pre
 - **Method**: `POST`
 - **Description**: Receives a verifiable credential and stores it in memory.
 - **Request Body**:
+  
   ```json
   {
     "@context": [
@@ -349,18 +348,23 @@ The Holder Service is a microservice responsible for receiving, storing, and pre
 ### Getting Started
 
 1. **Run the Holder Service**:
-   Ensure Docker is running and use the following command to start the service:
+Ensure Docker is running and use the following command to start the service:
+
    ```bash
    docker-compose up --build
    ```
 
 2. **Test the API**:
-   Use tools like `curl` or Postman to interact with the API:
-   - To receive a credential:
+Use tools like `curl` or Postman to interact with the API:
+
+- To receive a credential:
+
      ```bash
      curl -X POST http://localhost:8082/holder/receive -d '{"your":"data"}' -H "Content-Type: application/json"
      ```
-   - To present stored credentials:
+
+- To present stored credentials:
+  
      ```bash
      curl -X GET http://localhost:8082/holder/present
      ```
@@ -369,7 +373,6 @@ The Holder Service is a microservice responsible for receiving, storing, and pre
 
 - The Holder Service currently stores credentials in memory for simplicity. Future implementations may include persistent storage.
 - Ensure that the service adheres to W3C standards for verifiable credentials.
-
 
 ## Testing
 

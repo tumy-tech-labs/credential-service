@@ -64,25 +64,21 @@ services:
     networks:
       - cred-net
 
-  verification-service:
-    build:
-      context: ./verification-service
-    container_name: verification-service
-    ports:
-      - "8084:8080"
-    environment:
-      - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
-    depends_on:
-      - postgres
-    networks:
-      - cred-net
-
   holder-service:
     build:
       context: ./holder-service
     container_name: holder-service
     ports:
       - "8085:8080"
+    networks:
+      - cred-net
+  
+  verifier-service:
+    build:
+      context: ./verifier-service
+    container_name: verifier-service
+    ports:
+      - "8086:8080"
     networks:
       - cred-net
   
