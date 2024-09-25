@@ -11,8 +11,6 @@ A robust microservice designed for creating, managing, and verifying **W3C-compl
 - **Microservice Architecture**: Built as part of a modular and containerized microservice ecosystem, easily integratable into broader decentralized identity solutions.
 - **Issuer, Holder, Verifier Roles**: The service supports a complete lifecycle of identity management by addressing the needs of issuers, credential holders, and verifiers.
 
-This description highlights the portable and reusable aspects of your identity solutions, positioning your project as a cutting-edge tool for decentralized identity management.
-
 ## Table of Contents
 
 1. [Features](#features)
