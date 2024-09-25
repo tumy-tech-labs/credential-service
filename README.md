@@ -1,6 +1,17 @@
-# credential-service
+# Credential Service
+A robust microservice designed for creating, managing, and verifying **W3C-compliant Verifiable Credentials (VCs)**. This service allows organizations to issue credentials, link them to **Decentralized Identifiers (DIDs)**, and enable secure, privacy-preserving verification across multiple platforms.
 
-A service for creating and managing Verifiable Credentials, including associating them with Decentralized Identifiers (DIDs).
+### Key Features:
+- **Verifiable Credentials**: Issue credentials for a wide range of use cases, including identity verification, employment, education, and more, with full compliance to **W3C standards**.
+- **Decentralized Identifiers (DIDs)**: Associate VCs with **DIDs**, enabling portable and self-sovereign identities that users control.
+- **Interoperability & Portability**: Supports cross-industry use, allowing credentials to be reused and verified across different platforms without re-registration or data duplication.
+- **Privacy by Design**: Minimal disclosure and secure storage, ensuring that only necessary information is shared during verifications.
+- **Revocation Support**: Includes mechanisms to revoke credentials, ensuring that only valid credentials can be verified.
+- **Verifiable Presentations**: Generate and verify presentations of credentials to prove claims in a trusted and decentralized manner.
+- **Microservice Architecture**: Built as part of a modular and containerized microservice ecosystem, easily integratable into broader decentralized identity solutions.
+- **Issuer, Holder, Verifier Roles**: The service supports a complete lifecycle of identity management by addressing the needs of issuers, credential holders, and verifiers.
+
+This description highlights the portable and reusable aspects of your identity solutions, positioning your project as a cutting-edge tool for decentralized identity management.
 
 ## Table of Contents
 
