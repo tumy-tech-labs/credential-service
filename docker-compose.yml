@@ -82,6 +82,20 @@ services:
     networks:
       - cred-net
   
+  resolver-service:
+    build:
+      context: ./resolver-service
+      dockerfile: Dockerfile
+    container_name: resolver-service
+    ports:
+      - "8087:8080"
+    networks:
+      - cred-net
+    environment:
+      - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
+    depends_on:
+      - postgres  # This assumes you have a DB service defined (modify as necessary)
+  
   # Add HashiCorp Vault service
   vault:
     image: vault:1.13.1
@@ -100,7 +114,6 @@ services:
     command: server -dev  # Dev mode for testing, use production settings later
     depends_on:
       - postgres
-
 
 networks:
   cred-net:
