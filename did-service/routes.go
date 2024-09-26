@@ -14,12 +14,4 @@ func InitializeRoutes() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-
-	http.HandleFunc("/dids/resolver", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			getDID(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
 }
