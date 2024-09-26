@@ -61,7 +61,8 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve the issuer DID
-	resolverURL := fmt.Sprintf("http://did-service:8080/dids/resolver?did=%s", url.QueryEscape(req.IssuerDid))
+	resolverURL := fmt.Sprintf("http://resolver-service:8080/dids/resolver?did=%s", url.QueryEscape(req.IssuerDid))
+	//resolverURL := fmt.Sprintf("http://resolver-service:8087/dids/resolver?did=%s", req.IssuerDid)
 	resp, err := http.Get(resolverURL)
 	if err != nil {
 		log.Printf("Failed to fetch DID document from resolver: %v", err)

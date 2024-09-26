@@ -13,12 +13,20 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+// Define the PublicKey struct
+type PublicKey struct {
+	ID              string `json:"id"`
+	Type            string `json:"type"`
+	Controller      string `json:"controller"`
+	PublicKeyBase58 string `json:"publicKeyBase58"`
+}
+
 type DIDDocument struct {
-	Context        string `json:"@context"`
-	ID             string `json:"id"`
-	PublicKey      string `json:"publicKey"`
-	CreatedAt      string `json:"createdAt"`
-	OrganizationID string `json:"organization_id"`
+	Context        string      `json:"@context"`
+	ID             string      `json:"id"`
+	PublicKey      []PublicKey `json:"publicKey"` // Change this to a slice of PublicKey
+	CreatedAt      string      `json:"createdAt"`
+	OrganizationID string      `json:"organization_id"`
 }
 
 // Create a new DID and store the DID document in the database
@@ -54,11 +62,27 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 	did := fmt.Sprintf("did:key:z6M%s", encodedPublicKey)
 	createdAt := time.Now().UTC()
 
+	// Create the PublicKey object
+	publicKeyObject := PublicKey{
+		ID:              fmt.Sprintf("%s#keys-1", did), // Unique key ID
+		Type:            "Ed25519VerificationKey2018",
+		Controller:      did,
+		PublicKeyBase58: encodedPublicKey,
+	}
+
+	// Create a JSON representation of the public key
+	publicKeyJSON, err := json.Marshal([]PublicKey{publicKeyObject})
+	if err != nil {
+		log.Printf("Failed to marshal public key: %v", err)
+		http.Error(w, "Failed to generate DID", http.StatusInternalServerError)
+		return
+	}
+
 	// Create the DID Document
 	didDocument := DIDDocument{
 		Context:        "https://www.w3.org/ns/did/v1",
 		ID:             did,
-		PublicKey:      encodedPublicKey,
+		PublicKey:      []PublicKey{publicKeyObject}, // Wrap in an array
 		CreatedAt:      createdAt.Format(time.RFC3339),
 		OrganizationID: organizationID,
 	}
@@ -71,9 +95,12 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log the generated JSON
+	log.Printf("DID Document JSON: %s", string(didDocJSON))
+
 	// Store the DID, public key, and DID document in the database
 	query := "INSERT INTO dids (did, organization_id, created_at, public_key, document) VALUES ($1, $2, $3, $4, $5)"
-	_, err = db.Exec(context.Background(), query, did, organizationID, createdAt, encodedPublicKey, didDocJSON)
+	_, err = db.Exec(context.Background(), query, did, organizationID, createdAt, publicKeyJSON, didDocJSON)
 	if err != nil {
 		log.Printf("Failed to insert DID into database: %v", err)
 		http.Error(w, "Failed to store DID", http.StatusInternalServerError)
@@ -92,7 +119,6 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 	w.Write(didDocJSON)
 	log.Printf("DID created successfully: %s", did)
 }
-
 func getDIDs(w http.ResponseWriter, r *http.Request) {
 	// Query to retrieve DIDs from the database
 	rows, err := db.Query(context.Background(), "SELECT did, document FROM dids")

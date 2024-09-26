@@ -1,11 +1,14 @@
+-- Create extension for UUID in the presentations table
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Create DID management table
-CREATE TABLE IF NOT EXISTS dids (
+CREATE TABLE dids (
     id SERIAL PRIMARY KEY,
-    did TEXT NOT NULL,
+    did TEXT NOT NULL UNIQUE,
     organization_id TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
-    public_key TEXT,  -- Add this column
-    document JSONB NOT NULL  -- Store DID document as JSONB
+    public_key JSONB, -- Store the public keys as a JSON array
+    document JSONB     -- Store the DID document as JSON
 );
 
 -- Create DID document storage table
@@ -42,9 +45,6 @@ CREATE TABLE IF NOT EXISTS revocation_registry (
     revocation_reason TEXT,                                   -- Reason for revocation
     revoked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP            -- Timestamp of revocation
 );
-
--- Create extension for UUID in the presentations table
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create presentations table 
 CREATE TABLE IF NOT EXISTS presentations (
