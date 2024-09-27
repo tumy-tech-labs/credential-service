@@ -30,6 +30,8 @@ A robust microservice designed for creating, managing, and verifying **W3C-compl
 - **Dynamic Payloads**: Include issuer DID and subject details in the POST request payload.
 - **REST API**: Expose endpoints for creating, retrieving, and revoking credentials.
 
+Sequence Diagram:
+
 ```mermaid
 sequenceDiagram
     participant Issuer
@@ -56,6 +58,36 @@ sequenceDiagram
     VerificationService->>VerificationService: Verify Presentation
     VerificationService-->>Verifier: Return Verification Result
     Verifier->>Holder: Return Verification Status
+```
+
+Data Flow Diagram:
+
+```mermaid
+graph TD
+    IssuerService["Issuer Service"]
+    HolderService["Holder Service"]
+    VerifierService["Verifier Service"]
+    ResolverService["Resolver Service"]
+    DIDService["DID Service"]
+
+    subgraph DID Creation
+        IssuerService -->|Creates DID| DIDService
+    end
+
+    subgraph Credential Issuance
+        IssuerService -->|Issues Credential| HolderService
+    end
+
+    subgraph Credential Verification
+        HolderService -->|Presents Credential| VerifierService
+    end
+
+    VerifierService -->|Queries| ResolverService
+    IssuerService -->|Queries| ResolverService
+    DIDService -->|Stores DID Document| ResolverService
+
+    ResolverService -->|Resolves DID| IssuerService
+    ResolverService -->|Resolves DID| VerifierService
 ```
 
 ## Requirements
