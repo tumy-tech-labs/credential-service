@@ -37,7 +37,6 @@ CREATE TABLE IF NOT EXISTS verifiable_credentials (
     proof JSONB                                -- Proof of the credential
 );
 
-
 -- Create revocation table (optional, for more detailed tracking)
 CREATE TABLE IF NOT EXISTS revocation_registry (
     id SERIAL PRIMARY KEY,
@@ -54,4 +53,17 @@ CREATE TABLE IF NOT EXISTS presentations (
     presentation_data JSONB NOT NULL,
     processing_id VARCHAR NOT NULL UNIQUE
 );
+
+-- Create the schemas table with schema_id from the payload
+CREATE TABLE schemas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),                    -- Schema ID provided in the payload
+    organization_did VARCHAR(255) NOT NULL,         -- Organization DID
+    schema_name VARCHAR(255) NOT NULL,              -- Human-readable name for the schema
+    schema_json JSONB NOT NULL,                     -- JSON representation of the schema's properties
+    created_at TIMESTAMP DEFAULT NOW(),             -- Timestamp for when the schema was created
+    updated_at TIMESTAMP DEFAULT NOW()              -- Timestamp for last update
+);
+
+-- Create an index on organization_did for faster lookups
+CREATE INDEX idx_organization_did ON schemas (organization_did);
 
