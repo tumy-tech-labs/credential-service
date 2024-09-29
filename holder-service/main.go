@@ -12,6 +12,7 @@ func main() {
 	// Initialize routes
 	routes := InitializeRoutes()
 
+	// Initialize Port from the env
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
