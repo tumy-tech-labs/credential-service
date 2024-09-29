@@ -1,0 +1,22 @@
+{
+    "credentialID": {
+        "type": "string",
+        "required": true
+    },
+    "credentialType": {
+        "type": "string",
+        "required": true
+    },
+    "issueDate": {
+        "type": "string",
+        "required": true
+    },
+    "expirationDate": {
+        "type": "string",
+        "required": true
+    },
+    "issuer": {
+        "type": "string",
+        "required": true
+    }
+}

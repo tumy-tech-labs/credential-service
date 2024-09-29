@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -45,6 +46,60 @@ type CredentialRequest struct {
 	} `json:"subject"`
 }
 
+// BaseSchema represents the structure of the base schema
+type BaseSchema struct {
+	CredentialID   Property `json:"credentialID"`
+	CredentialType Property `json:"credentialType"`
+	IssueDate      Property `json:"issueDate"`
+	ExpirationDate Property `json:"expirationDate"`
+	Issuer         Property `json:"issuer"`
+}
+
+// Property represents a property of the schema
+type Property struct {
+	Name     string `json:"name"`     // Name of the property
+	Type     string `json:"type"`     // Type of the property (e.g., string, integer)
+	Required bool   `json:"required"` // Indicate if the property is required
+}
+
+// Schema represents a JSON Schema structure.
+type Schema struct {
+	Properties []Property `json:"properties"` // Array of properties
+}
+
+// loadBaseSchema loads the base schema from a JSON file.
+func loadBaseSchema(filePath string) (BaseSchema, error) {
+	var baseSchema BaseSchema
+	file, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return baseSchema, fmt.Errorf("failed to read base schema file: %v", err)
+	}
+
+	if err := json.Unmarshal(file, &baseSchema); err != nil {
+		return baseSchema, fmt.Errorf("failed to unmarshal base schema JSON: %v", err)
+	}
+
+	return baseSchema, nil
+}
+
+func mergeSchemas(base BaseSchema, customerSchema Schema) Schema {
+	// Create a new schema to hold the merged properties
+	mergedSchema := Schema{
+		Properties: []Property{
+			base.CredentialID,
+			base.CredentialType,
+			base.IssueDate,
+			base.ExpirationDate,
+			base.Issuer,
+		},
+	}
+
+	// Append customer schema properties
+	mergedSchema.Properties = append(mergedSchema.Properties, customerSchema.Properties...)
+
+	return mergedSchema
+}
+
 // IssueCredential issues a verifiable credential
 func issueCredential(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -62,7 +117,6 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the issuer DID
 	resolverURL := fmt.Sprintf("http://resolver-service:8080/dids/resolver?did=%s", url.QueryEscape(req.IssuerDid))
-	//resolverURL := fmt.Sprintf("http://resolver-service:8087/dids/resolver?did=%s", req.IssuerDid)
 	resp, err := http.Get(resolverURL)
 	if err != nil {
 		log.Printf("Failed to fetch DID document from resolver: %v", err)
@@ -92,6 +146,8 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
 		return
 	}
+
+	log.Println("Here's the Private Key to parse: ", privateKeyPEM)
 
 	privateKey, err := parseEd25519PrivateKeyFromBase64(privateKeyPEM)
 	if err != nil {
@@ -192,17 +248,50 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 
 // Additional functions for Vault, parsing, signing, etc.
 
+// Function to retrieve the private key from HashiCorp Vault
 func getPrivateKeyFromVault(issuerDid string, client *api.Client) (string, error) {
-	// Placeholder: add logic to retrieve the key from HashiCorp Vault
-	return "PRIVATE_KEY_BASE64_STRING", nil
+	// Assuming the path to the secret in Vault is structured as "secret/data/dids/<issuerDid>"
+	secretPath := fmt.Sprintf("secret/data/dids/%s", issuerDid)
+	log.Println("Secrets path --> We are looking for secrets here: ", secretPath)
+
+	// Fetch the secret from Vault
+	secret, err := client.Logical().Read(secretPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read secret from Vault: %w", err)
+	}
+	if secret == nil {
+		return "", fmt.Errorf("no secret found at path: %s", secretPath)
+	}
+
+	// Retrieve the base64-encoded private key from the secret data
+	data, ok := secret.Data["data"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("secret data is not in the expected format")
+	}
+
+	privateKeyBase64, ok := data["private_key"].(string)
+	if !ok {
+		return "", fmt.Errorf("private key not found in secret data")
+	}
+
+	return privateKeyBase64, nil
 }
 
-func parseEd25519PrivateKeyFromBase64(key string) ([]byte, error) {
-	// Placeholder: add logic to parse the private key
-	return []byte(key), nil
+// Function to parse the base64-encoded Ed25519 private key
+func parseEd25519PrivateKeyFromBase64(base64Key string) ([]byte, error) {
+	// Decode the base64 string
+	privateKeyBytes, err := base64.StdEncoding.DecodeString(base64Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 private key: %w", err)
+	}
+	return privateKeyBytes, nil
 }
 
+// Function to sign the credential using the Ed25519 private key
 func signCredential(privateKey []byte, credentialJSON []byte) ([]byte, error) {
-	// Placeholder: add logic to sign the credential using Ed25519
-	return []byte("SIGNATURE"), nil
+	// Use your signing logic here.
+	// Placeholder: In practice, use a library to sign with the Ed25519 key
+	signature := []byte("SIGNATURE") // Replace with actual signing logic
+
+	return signature, nil
 }

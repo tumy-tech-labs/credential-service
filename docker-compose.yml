@@ -96,6 +96,21 @@ services:
     depends_on:
       - postgres  # This assumes you have a DB service defined (modify as necessary)
   
+  schema-service:
+    #image: schema-service:latest  # You can change this to the built image tag or use 'build' if you are building locally
+    build:
+      context: ./schema-service  # Path to your schema-service source code
+      dockerfile: Dockerfile  # Optional, defaults to Dockerfile
+    container_name: schema-service
+    ports:
+      - "8088:8080"  # Expose port 8086 for external access
+    environment:
+      - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
+    depends_on:
+      - postgres
+    networks:
+      - cred-net  # Ensure it is part of the same network as other services
+  
   # Add HashiCorp Vault service
   vault:
     image: vault:1.13.1
@@ -114,7 +129,7 @@ services:
     command: server -dev  # Dev mode for testing, use production settings later
     depends_on:
       - postgres
-
+      
 networks:
   cred-net:
 
