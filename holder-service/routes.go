@@ -25,6 +25,7 @@ func InitializeRoutes() *mux.Router {
 	r.Handle("/holder/receive", LoggingMiddleware(http.HandlerFunc(ReceiveCredential))).Methods("POST")
 	r.Handle("/holder/present", LoggingMiddleware(http.HandlerFunc(PresentCredential))).Methods("GET")
 	r.Handle("/credentials", LoggingMiddleware(http.HandlerFunc(CredentialsHandler))).Methods("GET")
+	r.Handle("/holder/request", LoggingMiddleware(http.HandlerFunc(handlePresentationRequest))).Methods("POST")
 
 	return r
 }

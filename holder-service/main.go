@@ -5,9 +5,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+
+	// Load environment variables
+	_ = godotenv.Load()
 
 	// Initialize routes
 	routes := InitializeRoutes()
