@@ -20,13 +20,13 @@ type PublicKey struct {
 	Controller      string `json:"controller"`
 	PublicKeyBase58 string `json:"publicKeyBase58"`
 }
-
 type DIDDocument struct {
 	Context        string      `json:"@context"`
 	ID             string      `json:"id"`
-	PublicKey      []PublicKey `json:"publicKey"` // Change this to a slice of PublicKey
+	PublicKey      []PublicKey `json:"publicKey"`
 	CreatedAt      string      `json:"createdAt"`
-	OrganizationID string      `json:"organization_id"`
+	OrganizationID string      `json:"organization_id,omitempty"` // Keep this as it is
+	HolderID       string      `json:"holder_id,omitempty"`       // Add HolderID
 }
 
 // Create a new DID and store the DID document in the database
@@ -45,21 +45,59 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 	// Convert ed25519.PrivateKey to base64 string
 	encodedPrivateKey := base64.StdEncoding.EncodeToString(privateKey)
 
-	// Extract organization_id from the request payload
-	var payload map[string]interface{}
+	// Extract type from the request payload
+	var payload struct {
+		Type           string `json:"type"` // "organization" or "holder"
+		OrganizationID string `json:"organization_id,omitempty"`
+		HolderID       string `json:"holder_id,omitempty"`
+	}
 	err = json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	organizationID, ok := payload["organization_id"].(string)
-	if !ok {
-		organizationID = "default-org" // Fallback value if not provided
+	/*
+		// Extract organization_id from the request payload
+		var payload map[string]interface{}
+		err = json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Invalid request payload", http.StatusBadRequest)
+			return
+		}
+
+		organizationID, ok := payload["organization_id"].(string)
+		if !ok {
+			organizationID = "default-org" // Fallback value if not provided
+		}
+	*/
+
+	var did string
+
+	// Construct the DID based on the type
+	switch payload.Type {
+	case "organization":
+		if payload.OrganizationID == "" {
+			http.Error(w, "Missing organization_id", http.StatusBadRequest)
+			return
+		}
+		did = fmt.Sprintf("did:key:z6M%s", encodedPublicKey)
+	case "holder":
+		if payload.HolderID == "" {
+			http.Error(w, "Missing holder_id", http.StatusBadRequest)
+			return
+		}
+		did = fmt.Sprintf("did:key:z6M%s", encodedPublicKey)
+	default:
+		http.Error(w, "Invalid type specified", http.StatusBadRequest)
+		return
 	}
 
-	// Construct the DID
-	did := fmt.Sprintf("did:key:z6M%s", encodedPublicKey)
+	/*
+		// Construct the DID
+		did := fmt.Sprintf("did:key:z6M%s", encodedPublicKey)
+	*/
+
 	createdAt := time.Now().UTC()
 
 	// Create the PublicKey object
@@ -80,11 +118,20 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 
 	// Create the DID Document
 	didDocument := DIDDocument{
-		Context:        "https://www.w3.org/ns/did/v1",
-		ID:             did,
-		PublicKey:      []PublicKey{publicKeyObject}, // Wrap in an array
-		CreatedAt:      createdAt.Format(time.RFC3339),
-		OrganizationID: organizationID,
+		Context:   "https://www.w3.org/ns/did/v1",
+		ID:        did,
+		PublicKey: []PublicKey{publicKeyObject}, // Wrap in an array
+		CreatedAt: createdAt.Format(time.RFC3339),
+		//OrganizationID: organizationID,
+	}
+
+	// Set the OrganizationID or HolderID in the document based on the type
+	if payload.Type == "organization" {
+		didDocument.OrganizationID = payload.OrganizationID
+		didDocument.HolderID = "" // Ensure HolderID is empty
+	} else if payload.Type == "holder" {
+		didDocument.HolderID = payload.HolderID
+		didDocument.OrganizationID = "" // Ensure OrganizationID is empty
 	}
 
 	// Convert the DID document to JSON for storage
@@ -100,13 +147,12 @@ func createDID(w http.ResponseWriter, r *http.Request) {
 
 	// Store the DID, public key, and DID document in the database
 	query := "INSERT INTO dids (did, organization_id, created_at, public_key, document) VALUES ($1, $2, $3, $4, $5)"
-	_, err = db.Exec(context.Background(), query, did, organizationID, createdAt, publicKeyJSON, didDocJSON)
+	_, err = db.Exec(context.Background(), query, did, payload.OrganizationID, createdAt, publicKeyJSON, didDocJSON)
 	if err != nil {
 		log.Printf("Failed to insert DID into database: %v", err)
 		http.Error(w, "Failed to store DID", http.StatusInternalServerError)
 		return
 	}
-
 	// Securely store the private key
 	log.Printf("Private key for DID %s: %x", did, encodedPrivateKey)
 	err = savePrivateKeyToVault(did, encodedPrivateKey)
