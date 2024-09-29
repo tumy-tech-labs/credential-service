@@ -23,11 +23,36 @@ func initDB() {
 }
 
 func main() {
+
+	/* troubleshooting code */
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Error getting current working directory: %v", err)
+	}
+	log.Printf("Current working directory: %s", cwd)
+
+	if _, err := os.Stat("./configs/base-schema.json"); os.IsNotExist(err) {
+		log.Fatalf("File does not exist: %v", err)
+	} else {
+		log.Println("the base schema file exists")
+	}
+
 	// Connect to PostgreSQL database
 	initDB()
 
 	// Initialize routes
 	InitializeRoutes()
+
+	// Load the base schema at startup
+	baseSchema, err := loadBaseSchema("configs/base-schema.json")
+
+	if err != nil {
+		log.Fatalf("Error loading base schema: %v", err)
+	}
+
+	// Use the base schema as needed in your application
+	log.Printf("Loaded Base Schema: %+v", baseSchema)
 
 	// Start HTTP server
 	log.Println("Credential service running on port 8080...")

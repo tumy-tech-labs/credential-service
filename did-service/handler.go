@@ -192,6 +192,7 @@ func savePrivateKeyToVault(did string, privateKey string) error {
 
 	// Write the private key to Vault at the path "secret/data/dids/<did>"
 	secretPath := fmt.Sprintf("secret/data/dids/%s", did)
+	log.Println("Secret Path --> We stored the secrets here: ", secretPath)
 	_, err = client.Logical().Write(secretPath, data)
 	if err != nil {
 		return fmt.Errorf("failed to write private key to Vault: %w", err)
