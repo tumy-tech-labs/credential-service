@@ -22,7 +22,6 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 func InitializeRoutes() *mux.Router {
 	r := mux.NewRouter()
-	r.Handle("/holder", LoggingMiddleware(http.HandlerFunc(emptyResponse))).Methods("GET")
 	r.Handle("/holder/receive", LoggingMiddleware(http.HandlerFunc(ReceiveCredential))).Methods("POST")
 	r.Handle("/holder/present", LoggingMiddleware(http.HandlerFunc(PresentCredential))).Methods("GET")
 
