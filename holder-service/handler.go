@@ -6,20 +6,6 @@ import (
 	"net/http"
 )
 
-func emptyResponse(w http.ResponseWriter, r *http.Request) {
-	log.Println("Empty Response")
-	w.WriteHeader(http.StatusOK) // Return a 200 OK status
-	w.Write([]byte(""))
-
-	log.Println("Generated Empty Response")
-}
-
-func HelloWorld(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hello, World!")
-	w.WriteHeader(http.StatusOK) // Return a 200 OK status
-	w.Write([]byte("Hello, World!"))
-}
-
 func ReceiveCredential(w http.ResponseWriter, r *http.Request) {
 	log.Println("Entered the Receive Credentials Handler")
 	// Handle receiving a verifiable credential
