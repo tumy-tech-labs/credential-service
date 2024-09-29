@@ -33,3 +33,18 @@ func PresentCredential(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(credentials)
 }
+
+// CredentialsHandler returns all verifiable credentials currently held by the holder
+func CredentialsHandler(w http.ResponseWriter, r *http.Request) {
+	credentials := GetStoredCredentials()
+	jsonResponse, err := json.Marshal(credentials)
+	if err != nil {
+		log.Printf("Error marshalling credentials: %v", err)
+		http.Error(w, "Failed to retrieve credentials", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonResponse)
+}
