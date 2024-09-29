@@ -21,21 +21,20 @@ CREATE TABLE IF NOT EXISTS did_documents (
 
 -- Create verifiable credentials table with subject properties and revocation functionality
 CREATE TABLE IF NOT EXISTS verifiable_credentials (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    did VARCHAR(255) NOT NULL,                 -- DID of the subject (credential holder)
-    issuer VARCHAR(255) NOT NULL,              -- DID of the issuer
-    credential JSONB NOT NULL,                 -- The verifiable credential (JSON format)
-    subject_name VARCHAR(255),                  -- Subject's name
-    subject_email VARCHAR(255),                 -- Subject's email
-    subject_phone VARCHAR(50),                  -- Subject's phone number
-    issuance_date TIMESTAMP NOT NULL,          -- When the credential was issued
-    expiration_date TIMESTAMP NOT NULL,        -- Expiration date of the credential
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp of credential issuance
-    revoked BOOLEAN DEFAULT FALSE,              -- Whether the credential is revoked
-    revocation_reason TEXT,                     -- Reason for revocation (optional)
-    revoked_at TIMESTAMP,                       -- Timestamp of when the credential was revoked (optional)
-    proof JSONB                                -- Proof of the credential
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),  -- Unique identifier for the credential
+    did VARCHAR(255) NOT NULL,                       -- DID of the subject (credential holder)
+    issuer VARCHAR(255) NOT NULL,                    -- DID of the issuer
+    credential JSONB NOT NULL,                       -- The verifiable credential (JSON format)
+    subject JSONB NOT NULL,                          -- Dynamic subject properties as JSON
+    issuance_date TIMESTAMP NOT NULL,                -- When the credential was issued
+    expiration_date TIMESTAMP NOT NULL,              -- Expiration date of the credential
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- Timestamp of credential issuance
+    revoked BOOLEAN DEFAULT FALSE,                    -- Whether the credential is revoked
+    revocation_reason TEXT,                           -- Reason for revocation (optional)
+    revoked_at TIMESTAMP,                             -- Timestamp of when the credential was revoked (optional)
+    proof JSONB                                       -- Proof of the credential
 );
+
 
 -- Create revocation table (optional, for more detailed tracking)
 CREATE TABLE IF NOT EXISTS revocation_registry (

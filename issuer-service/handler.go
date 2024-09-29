@@ -17,14 +17,14 @@ import (
 
 // VerifiableCredential structure following W3C schema
 type VerifiableCredential struct {
-	Context           []string          `json:"@context"`
-	Type              []string          `json:"type"`
-	ID                string            `json:"id"`
-	Issuer            string            `json:"issuer"`
-	IssuanceDate      string            `json:"issuanceDate"`
-	ExpirationDate    string            `json:"expirationDate"`
-	CredentialSubject map[string]string `json:"credentialSubject"`
-	Proof             Proof             `json:"proof,omitempty"`
+	Context           []string               `json:"@context"`
+	Type              []string               `json:"type"`
+	ID                string                 `json:"id"`
+	Issuer            string                 `json:"issuer"`
+	IssuanceDate      string                 `json:"issuanceDate"`
+	ExpirationDate    string                 `json:"expirationDate"`
+	CredentialSubject map[string]interface{} `json:"credentialSubject"`
+	Proof             Proof                  `json:"proof,omitempty"`
 }
 
 // Proof structure for digital signature
@@ -36,17 +36,14 @@ type Proof struct {
 	VerificationMethod string `json:"verificationMethod"`
 }
 
-// Request payload for issuing a credential
+// Updated Request payload for issuing a credential - using a map enables us to support different schema combinations.
 type CredentialRequest struct {
-	IssuerDid string `json:"issuerDid"`
-	Subject   struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
-		Phone string `json:"phone"`
-	} `json:"subject"`
+	IssuerDid string                 `json:"issuerDid"`
+	Subject   map[string]interface{} `json:"subject"` // Change to a dynamic structure
 }
 
 // BaseSchema represents the structure of the base schema
+// TODO: use a map for the base schema too so that we can change the base schema json file and dynamically update the type
 type BaseSchema struct {
 	CredentialID   Property `json:"credentialID"`
 	CredentialType Property `json:"credentialType"`
@@ -115,8 +112,31 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log the request for debugging purposes
+	log.Printf("Received credential request: %+v", req)
+
+	// Check if the required "id" field is present in the subject
+	subjectID, ok := req.Subject["id"].(string)
+	if !ok || subjectID == "" {
+		log.Printf("Subject ID is missing or empty")
+		http.Error(w, "Subject ID is required", http.StatusBadRequest)
+		return
+	}
+
+	/*
+		// Load the customer schema
+		customerSchema, err := loadCustomerSchema("path/to/customer_schema.json") // Provide the correct path to customer schema
+		if err != nil {
+			log.Printf("Failed to load customer schema: %v", err)
+			http.Error(w, "Failed to load customer schema", http.StatusInternalServerError)
+			return
+		}
+	*/
+
 	// Resolve the issuer DID
+	log.Println("Here is the issuer DID: ", req.IssuerDid)
 	resolverURL := fmt.Sprintf("http://resolver-service:8080/dids/resolver?did=%s", url.QueryEscape(req.IssuerDid))
+	log.Println("Resolver Endpoint:: ", resolverURL)
 	resp, err := http.Get(resolverURL)
 	if err != nil {
 		log.Printf("Failed to fetch DID document from resolver: %v", err)
@@ -171,18 +191,13 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 
 	// Create the verifiable credential
 	credential := VerifiableCredential{
-		Context:        []string{"https://www.w3.org/2018/credentials/v1"},
-		Type:           []string{"VerifiableCredential"},
-		ID:             credentialID,
-		Issuer:         req.IssuerDid,
-		IssuanceDate:   issuanceDate,
-		ExpirationDate: expirationDate,
-		CredentialSubject: map[string]string{
-			"id":    "did:example:" + uuid.New().String(),
-			"name":  req.Subject.Name,
-			"email": req.Subject.Email,
-			"phone": req.Subject.Phone,
-		},
+		Context:           []string{"https://www.w3.org/2018/credentials/v1"},
+		Type:              []string{"VerifiableCredential"},
+		ID:                credentialID,
+		Issuer:            req.IssuerDid,
+		IssuanceDate:      issuanceDate,
+		ExpirationDate:    expirationDate,
+		CredentialSubject: req.Subject, // Use the dynamic subject here
 	}
 
 	// Serialize the credential to JSON
@@ -218,17 +233,21 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Inserting credential with DID: %s", credential.Issuer) // Assuming you use Issuer as DID
+
 	// Store the credential in the database
 	_, err = db.Exec(context.Background(),
-		"INSERT INTO verifiable_credentials (id, did, issuer, credential, issuance_date, expiration_date, proof) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		"INSERT INTO verifiable_credentials (id, did, issuer, credential, subject, issuance_date, expiration_date, proof) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 		credential.ID,
-		credential.CredentialSubject["id"], // Use the subject ID here
+		subjectID, // Use the subject ID here
 		req.IssuerDid,
 		credentialJSON,
+		req.Subject, // Include the subject properties as JSON
 		credential.IssuanceDate,
 		credential.ExpirationDate,
 		proofJSON, // Insert the proof JSON here
 	)
+
 	if err != nil {
 		log.Printf("Failed to insert credential into database: %v", err)
 		http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
@@ -244,6 +263,10 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Credential issued successfully: %v", credential)
+}
+
+func loadCustomerSchema(s string) {
+	panic("unimplemented")
 }
 
 // Additional functions for Vault, parsing, signing, etc.

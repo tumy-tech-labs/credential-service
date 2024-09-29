@@ -14,6 +14,8 @@ func resolveDIDHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("here is the did that you want me to resolve: ", did)
+
 	ctx := context.Background()
 	// Resolve the DID
 	didDocument, err := resolveDID(ctx, did)
