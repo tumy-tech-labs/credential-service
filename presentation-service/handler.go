@@ -22,6 +22,7 @@ type VerifiablePresentation struct {
 
 // Handler function for handling verifiable presentation requests
 func handlePresentationRequest(w http.ResponseWriter, r *http.Request) {
+	log.Println("Got here.")
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
