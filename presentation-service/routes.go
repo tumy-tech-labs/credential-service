@@ -22,7 +22,10 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 func InitializeRoutes() *mux.Router {
 
 	r := mux.NewRouter()
-	r.HandleFunc("/presentation", handlePresentationRequest).Methods("POST")
+
+	// Version 1 routes
+	v1 := r.PathPrefix("/v1").Subrouter()
+	v1.HandleFunc("/presentation", handlePresentationRequest).Methods("POST")
 
 	return r
 }
