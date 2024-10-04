@@ -135,7 +135,7 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the issuer DID
 	log.Println("Here is the issuer DID: ", req.IssuerDid)
-	resolverURL := fmt.Sprintf("http://resolver-service:8080/dids/resolver?did=%s", url.QueryEscape(req.IssuerDid))
+	resolverURL := fmt.Sprintf("http://resolver-service:8080/v1/dids/resolver?did=%s", url.QueryEscape(req.IssuerDid))
 	log.Println("Resolver Endpoint:: ", resolverURL)
 	resp, err := http.Get(resolverURL)
 	if err != nil {

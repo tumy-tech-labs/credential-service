@@ -21,7 +21,7 @@ func main() {
 	initDB()
 
 	// Set up routes
-	InitializeRoutes()
+	routes := InitializeRoutes()
 
 	// Start the server
 	port := os.Getenv("PORT")
@@ -29,5 +29,5 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("DID Service running on port %s\n", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), routes))
 }
