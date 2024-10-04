@@ -42,7 +42,7 @@ func main() {
 	initDB()
 
 	// Initialize routes
-	InitializeRoutes()
+	route := InitializeRoutes()
 
 	// Load the base schema at startup
 	baseSchema, err := loadBaseSchema("configs/base-schema.json")
@@ -56,5 +56,5 @@ func main() {
 
 	// Start HTTP server
 	log.Println("Credential service running on port 8080...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", route))
 }

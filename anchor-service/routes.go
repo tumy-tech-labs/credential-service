@@ -18,17 +18,22 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// InitializeRoutes sets up the HTTP routes for the holder service.
+// initializeRoutes sets up the application routes.
+func initializeRoutes() *mux.Router {
 
-func InitializeRoutes() *mux.Router {
 	r := mux.NewRouter()
 
 	// Version 1 routes
 	v1 := r.PathPrefix("/v1").Subrouter()
-	v1.Handle("/holder/receive", LoggingMiddleware(http.HandlerFunc(ReceiveCredential))).Methods("POST")
-	v1.Handle("/holder/present", LoggingMiddleware(http.HandlerFunc(PresentCredential))).Methods("GET")
-	v1.Handle("/credentials", LoggingMiddleware(http.HandlerFunc(CredentialsHandler))).Methods("GET")
-	v1.Handle("/holder/request", LoggingMiddleware(http.HandlerFunc(handlePresentationRequest))).Methods("POST")
+	v1.Handle("/", LoggingMiddleware(http.HandlerFunc(helloWorld))).Methods("POST", "GET") // for debug
+	v1.Handle("/anchor/did", LoggingMiddleware(http.HandlerFunc(AnchorDIDHandler))).Methods("POST", "GET")
+	v1.Handle("/anchor/credential", LoggingMiddleware(http.HandlerFunc(AnchorCredentialHandler))).Methods("POST", "GET")
 
 	return r
+}
+
+// for debug
+func helloWorld(w http.ResponseWriter, r *http.Request) {
+	log.Println("Hello, World")
+	w.Write([]byte("Hello, World"))
 }

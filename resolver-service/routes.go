@@ -5,10 +5,12 @@ import (
 )
 
 func initializeRoutes() *mux.Router {
-	router := mux.NewRouter()
+	r := mux.NewRouter()
 
 	// Define the resolver route
-	router.HandleFunc("/dids/resolver", resolveDIDHandler).Methods("GET")
+	// Version 1 routes
+	v1 := r.PathPrefix("/v1").Subrouter()
+	v1.HandleFunc("/dids/resolver", resolveDIDHandler).Methods("GET")
 
-	return router
+	return r
 }
