@@ -5,14 +5,16 @@ import (
 )
 
 func initializeRoutes() *mux.Router {
-	router := mux.NewRouter()
+	r := mux.NewRouter()
 
+	// Version 1 routes
+	v1 := r.PathPrefix("/v1").Subrouter()
 	// Schema routes
-	router.HandleFunc("/schemas", createSchema).Methods("POST")
-	router.HandleFunc("/schemas", getAllSchemas).Methods("GET")
-	router.HandleFunc("/schemas/{id}", getSchemaByID).Methods("GET")
-	router.HandleFunc("/schemas/{id}", updateSchema).Methods("PUT")
-	router.HandleFunc("/schemas/{id}", deleteSchema).Methods("DELETE")
+	v1.HandleFunc("/schemas", createSchema).Methods("POST")
+	v1.HandleFunc("/schemas", getAllSchemas).Methods("GET")
+	v1.HandleFunc("/schemas/{id}", getSchemaByID).Methods("GET")
+	v1.HandleFunc("/schemas/{id}", updateSchema).Methods("PUT")
+	v1.HandleFunc("/schemas/{id}", deleteSchema).Methods("DELETE")
 
-	return router
+	return r
 }

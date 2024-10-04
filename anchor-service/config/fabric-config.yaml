@@ -1,0 +1,12 @@
+hyperledger:
+  peer:
+    address: "peer0.org1.example.com:7051"  # Replace with your peer address
+    local_msp_id: "Org1MSP"                   # Replace with your MSP ID
+    msp_config_path: "/etc/hyperledger/fabric/msp"  # Path to your MSP
+  orderer:
+    address: "orderer.example.com:7050"       # Replace with your orderer address
+    local_msp_id: "OrdererMSP"                 # Replace with your orderer's MSP ID
+    msp_config_path: "/etc/hyperledger/fabric/msp"  # Path to your orderer's MSP
+  channel:
+    name: "mychannel"                          # Replace with your channel name
+    configuration_file: "/var/hyperledger/configtx/mychannel.tx"  # Path to your channel configuration

@@ -31,8 +31,6 @@ services:
       VAULT_TOKEN: root
     ports:
       - "8080:8080"
-    depends_on:
-      - postgres
     networks:
       - cred-net
   
@@ -46,8 +44,6 @@ services:
       - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=root
-    depends_on:
-      - postgres
     networks:
       - cred-net
 
@@ -60,8 +56,6 @@ services:
     environment:
       DATABASE_URL: postgres://cred-service:cred-service-1@postgres:5432/credential-service
       PORT: 8080
-    depends_on:
-      - postgres
     networks:
       - cred-net
 
@@ -97,8 +91,6 @@ services:
       - cred-net
     environment:
       - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
-    depends_on:
-      - postgres  # This assumes you have a DB service defined (modify as necessary)
   
   schema-service:
     #image: schema-service:latest  # You can change this to the built image tag or use 'build' if you are building locally
@@ -110,11 +102,33 @@ services:
       - "8088:8080"  # Expose port 8086 for external access
     environment:
       - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
-    depends_on:
-      - postgres
     networks:
       - cred-net  # Ensure it is part of the same network as other services
   
+  anchor-service:
+    build:
+      context: ./anchor-service
+      dockerfile: Dockerfile # Assuming your Dockerfile is in the root directory
+    container_name: anchor-service
+    ports:
+      - "8089:8080"  # Expose the port 8080 externally
+    environment:
+      - GIN_MODE=release  # Set any additional environment variables if necessary
+      - FABRIC_CFG_PATH=/etc/hyperledger/fabric/config.yaml
+      - HYPERLEDGER_PEER_ADDRESS=peer0.org1.example.com:7051
+      - HYPERLEDGER_LOCAL_MSP_ID=Org1MSP
+      - HYPERLEDGER_MSP_CONFIG_PATH=/etc/hyperledger/fabric/msp
+      - HYPERLEDGER_ORDERER_ADDRESS=orderer.example.com:7050
+      - HYPERLEDGER_ORDERER_LOCAL_MSP_ID=OrdererMSP
+      - HYPERLEDGER_ORDERER_MSP_CONFIG_PATH=/etc/hyperledger/fabric/msp
+      - HYPERLEDGER_CHANNEL_NAME=mychannel
+      - FABRIC_USER=Admin@org1.example.com
+      - FABRIC_CHAINCODE_ID=basic
+    volumes:
+      - ./config:/etc/hyperledger/fabric
+    networks:
+      - cred-net  # Ensure it is on the same network as other microservices
+
   # Add HashiCorp Vault service
   vault:
     image: vault:1.13.1
