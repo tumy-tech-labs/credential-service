@@ -26,13 +26,13 @@ type DIDResponse struct {
 }
 
 // CreateDID creates a new DID and returns the DIDResponse.
-func (c *Client) CreateDID() (DIDResponse, error) {
+func (c *Client) CreateDID(orgID string) (DIDResponse, error) {
 	url := fmt.Sprintf("%s/v1/dids", c.DIDServiceURL)
 
 	// Construct the request payload
 	didRequest := DIDRequest{
 		Type:           "organization", // This is the type expected by the service
-		OrganizationID: "orgABC",       // Replace with actual organization ID if necessary
+		OrganizationID: orgID,          // Replace with actual organization ID if necessary
 	}
 
 	// Serialize the request payload to JSON
