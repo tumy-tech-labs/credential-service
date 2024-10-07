@@ -10,13 +10,25 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-func initDB() {
+var dbClosed bool = true // Track if the pool is closed
+
+func initDB() (*pgxpool.Pool, error) {
 	var err error
 	db, err = pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	} else {
 		log.Println("Connected to database successfully")
+	}
+	dbClosed = false // Set to false when connected
+	return db, nil   // Return the connection pool and no error
+}
+
+func closeDB() {
+	if db != nil {
+		db.Close()
+		dbClosed = true // Mark as closed
+		log.Println("Database connection closed")
 	}
 }
 
