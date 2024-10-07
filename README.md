@@ -136,10 +136,17 @@ curl -X POST http://localhost:8080/dids \
 ```json
 {
     "@context": "https://www.w3.org/ns/did/v1",
-    "id": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
-    "publicKey": "sjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
-    "createdAt": "2024-09-21T21:57:13Z",
-    "organization_id": "org123"
+    "id": "did:key:z6M52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k",
+    "publicKey": [
+        {
+            "id": "did:key:z6M52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k#keys-1",
+            "type": "Ed25519VerificationKey2018",
+            "controller": "did:key:z6M52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k",
+            "publicKeyBase58": "52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k"
+        }
+    ],
+    "createdAt": "2024-10-07T22:47:10Z",
+    "organization_id": "orgABC"
 }
 ```
 
