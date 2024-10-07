@@ -15,7 +15,7 @@ services:
     networks:
       - cred-net
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "cred-service"]
+      test: ["CMD", "pg_isready", "-U", "cred-service", "-d", "credential-service"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,6 +23,9 @@ services:
   did-service:
     build:
       context: ./did-service
+    depends_on:
+      postgres:
+        condition: service_healthy
     container_name: did-service
     environment:
       DATABASE_URL: postgres://cred-service:cred-service-1@postgres:5432/credential-service
