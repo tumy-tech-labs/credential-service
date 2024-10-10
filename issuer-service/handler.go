@@ -38,8 +38,8 @@ type Proof struct {
 
 // Updated Request payload for issuing a credential - using a map enables us to support different schema combinations.
 type CredentialRequest struct {
-	IssuerDid string                 `json:"issuerDid"`
-	Subject   map[string]interface{} `json:"subject"` // Change to a dynamic structure
+	IssuerDid string                   `json:"issuerDid"`
+	Subjects  []map[string]interface{} `json:"subject"` // Change to a dynamic structure
 }
 
 // BaseSchema represents the structure of the base schema
@@ -112,26 +112,20 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log the request for debugging purposes
-	log.Printf("Received credential request: %+v", req)
-
-	// Check if the required "id" field is present in the subject
-	subjectID, ok := req.Subject["id"].(string)
-	if !ok || subjectID == "" {
-		log.Printf("Subject ID is missing or empty")
-		http.Error(w, "Subject ID is required", http.StatusBadRequest)
+	if len(req.Subjects) == 0 {
+		http.Error(w, "No subjects provided", http.StatusBadRequest)
 		return
 	}
 
-	/*
-		// Load the customer schema
-		customerSchema, err := loadCustomerSchema("path/to/customer_schema.json") // Provide the correct path to customer schema
-		if err != nil {
-			log.Printf("Failed to load customer schema: %v", err)
-			http.Error(w, "Failed to load customer schema", http.StatusInternalServerError)
-			return
-		}
-	*/
+	// Enqueue the bulk request to RabbitMQ for processing.
+	if err := enqueueBulkIssuance(req); err != nil {
+		log.Printf("Failed to enqueue bulk issuance: %v", err)
+		http.Error(w, "Failed to process request", http.StatusInternalServerError)
+		return
+	}
+
+	// Log the request for debugging purposes
+	log.Printf("Received credential request: %+v", req)
 
 	// Resolve the issuer DID
 	log.Println("Here is the issuer DID: ", req.IssuerDid)
@@ -191,13 +185,15 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 
 	// Create the verifiable credential
 	credential := VerifiableCredential{
-		Context:           []string{"https://www.w3.org/2018/credentials/v1"},
-		Type:              []string{"VerifiableCredential"},
-		ID:                credentialID,
-		Issuer:            req.IssuerDid,
-		IssuanceDate:      issuanceDate,
-		ExpirationDate:    expirationDate,
-		CredentialSubject: req.Subject, // Use the dynamic subject here
+		Context:        []string{"https://www.w3.org/2018/credentials/v1"},
+		Type:           []string{"VerifiableCredential"},
+		ID:             credentialID,
+		Issuer:         req.IssuerDid,
+		IssuanceDate:   issuanceDate,
+		ExpirationDate: expirationDate,
+		CredentialSubject: map[string]interface{}{
+			"subject": req.Subjects[0], // Assuming you are using the first subject
+		},
 	}
 
 	// Serialize the credential to JSON
@@ -235,14 +231,23 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Inserting credential with DID: %s", credential.Issuer) // Assuming you use Issuer as DID
 
+	// Extract subjectID from the first subject
+	subjectMap := req.Subjects[0]              // Assuming you're dealing with the first subject for now
+	subjectID, ok := subjectMap["id"].(string) // Assuming the subject has an "id" field
+	if !ok {
+		log.Printf("Subject ID is missing or not a string")
+		http.Error(w, "Invalid subject data", http.StatusBadRequest)
+		return
+	}
+
 	// Store the credential in the database
 	_, err = db.Exec(context.Background(),
 		"INSERT INTO verifiable_credentials (id, did, issuer, credential, subject, issuance_date, expiration_date, proof) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 		credential.ID,
-		subjectID, // Use the subject ID here
-		req.IssuerDid,
-		credentialJSON,
-		req.Subject, // Include the subject properties as JSON
+		subjectID,       // Use the extracted subject ID here
+		req.IssuerDid,   // Issuer DID
+		credentialJSON,  // Credential JSON
+		req.Subjects[0], // Insert the first subject's properties as JSON
 		credential.IssuanceDate,
 		credential.ExpirationDate,
 		proofJSON, // Insert the proof JSON here
