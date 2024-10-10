@@ -105,7 +105,7 @@ Step-by-step instructions on how to install the project.
 1. Clone the repository:
 
   ```bash
-  git clone https://github.com/bradtumy/credential-service.git
+  git clone https://github.com/tumy-tech-labs/credential-service.git
   cd credential-service
   ```
 
@@ -566,4 +566,4 @@ This project is licensed under the Apache2 License - see the LICENSE file for de
 How to connect for support or issues.
 
 Email: <brad@tumy-tech.com>  
-GitHub: bradtumy
+GitHub: tumy-tech-labs
