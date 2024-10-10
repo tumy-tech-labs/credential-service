@@ -126,7 +126,7 @@ TODO: Create DID's for Holders and Verifiers as well.
 **Request:**
 
 ```bash
-curl -X POST http://localhost:8080/dids \
+curl -X POST http://localhost:8080/v1/dids \
 -H "Content-Type: application/json" \
 -d '{
   "organization_id": "org123"
@@ -157,7 +157,7 @@ curl -X POST http://localhost:8080/dids \
 **Request:**
 
 ```bash
-curl -X GET http://localhost:8080/dids/resolver?did=did:key:z6MnewDIDhere
+curl -X GET http://localhost:8080/v1/dids/resolver?did=did:key:z6MnewDIDhere
 ```
 
 **Response:**
@@ -189,7 +189,7 @@ When Issuing the credentials, provide the DID that you created in the previous s
 **Example Request:**
 
 ```bash
-curl -X POST http://localhost:8080/credentials \
+curl -X POST http://localhost:8080/v1/credentials \
 -H "Content-Type: application/json" \
 -d '{
   "issuerDid": "did:key:z6MyourIssuerDIDhere",
@@ -228,7 +228,7 @@ This is currently not working.
 **Request:**
 
 ```bash
-curl -X GET http://localhost:8080/credentials
+curl -X GET http://localhost:8080/v1/credentials
 ```
 
 **Response:**
@@ -252,7 +252,7 @@ curl -X GET http://localhost:8080/credentials
 **Request:**
 
 ```bash
-curl -X DELETE http://localhost:8080/credentials/credential-id
+curl -X DELETE http://localhost:8080/v1/credentials/credential-id
 ```
 
 **Response:**
@@ -268,7 +268,7 @@ curl -X DELETE http://localhost:8080/credentials/credential-id
 **Request:**
 
 ```bash
-curl -X POST http://localhost:8080/presentations \
+curl -X POST http://localhost:8080/v1/presentations \
 -H "Content-Type: application/json" \
 -d '{
   "holderDid": "did:key:z6MholderDIDhere",
@@ -289,7 +289,7 @@ curl -X POST http://localhost:8080/presentations \
 **Request:**
 
 ```bash
-curl -X GET http://localhost:8080/presentations/presentation-id
+curl -X GET http://localhost:8080/v1/presentations/presentation-id
 ```
 
 **Response:**
@@ -306,7 +306,7 @@ curl -X GET http://localhost:8080/presentations/presentation-id
 **Request:**
 
 ```bash
-curl -X GET http://localhost:8080/verifications/presentation-id
+curl -X GET http://localhost:8080/v1/verifications/presentation-id
 ```
 
 **Response:**
@@ -354,7 +354,7 @@ The Holder Service is a microservice responsible for receiving, storing, and pre
 
 #### 1. Receive Credential
 
-- **Endpoint**: `/holder/receive`
+- **Endpoint**: `/v1/holder/receive`
 - **Method**: `POST`
 - **Description**: Receives a verifiable credential and stores it in memory.
 - **Request Body**:
@@ -389,7 +389,7 @@ The Holder Service is a microservice responsible for receiving, storing, and pre
 
 #### 2. Present Credential
 
-- **Endpoint**: `/holder/present`
+- **Endpoint**: `/v1/holder/present`
 - **Method**: `GET`
 - **Description**: Presents all stored credentials for verification.
 - **Response**:
@@ -410,13 +410,13 @@ Use tools like `curl` or Postman to interact with the API:
 - To receive a credential:
 
      ```bash
-     curl -X POST http://localhost:8082/holder/receive -d '{"your":"data"}' -H "Content-Type: application/json"
+     curl -X POST http://localhost:8082/v1/holder/receive -d '{"your":"data"}' -H "Content-Type: application/json"
      ```
 
 - To present stored credentials:
   
      ```bash
-     curl -X GET http://localhost:8082/holder/present
+     curl -X GET http://localhost:8082/v1/holder/present
      ```
 
 ### Notes
@@ -528,7 +528,7 @@ This endpoint receives a Verifiable Presentation (VP) from the Holder service an
 To send a Verifiable Presentation for verification, you can use `curl` or any HTTP client:
 
    ```bash
-   curl -X POST http://localhost:8083/verifier/verify \
+   curl -X POST http://localhost:8083/v1/verifier/verify \
    -H "Content-Type: application/json" \
    -d '{
        "@context": ["https://www.w3.org/2018/credentials/v1"],
