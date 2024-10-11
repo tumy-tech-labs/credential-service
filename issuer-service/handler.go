@@ -38,8 +38,8 @@ type Proof struct {
 
 // Updated Request payload for issuing a credential - using a map enables us to support different schema combinations.
 type CredentialRequest struct {
-	IssuerDid string                 `json:"issuerDid"`
-	Subject   map[string]interface{} `json:"subject"` // Change to a dynamic structure
+	IssuerDid string                   `json:"issuerDid"`
+	Subjects  []map[string]interface{} `json:"subject"` // Change to a dynamic structure
 }
 
 // BaseSchema represents the structure of the base schema
@@ -79,6 +79,7 @@ func loadBaseSchema(filePath string) (BaseSchema, error) {
 	return baseSchema, nil
 }
 
+/*
 func mergeSchemas(base BaseSchema, customerSchema Schema) Schema {
 	// Create a new schema to hold the merged properties
 	mergedSchema := Schema{
@@ -96,6 +97,7 @@ func mergeSchemas(base BaseSchema, customerSchema Schema) Schema {
 
 	return mergedSchema
 }
+*/
 
 // IssueCredential issues a verifiable credential
 func issueCredential(w http.ResponseWriter, r *http.Request) {
@@ -112,26 +114,20 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log the request for debugging purposes
-	log.Printf("Received credential request: %+v", req)
-
-	// Check if the required "id" field is present in the subject
-	subjectID, ok := req.Subject["id"].(string)
-	if !ok || subjectID == "" {
-		log.Printf("Subject ID is missing or empty")
-		http.Error(w, "Subject ID is required", http.StatusBadRequest)
+	if len(req.Subjects) == 0 {
+		http.Error(w, "No subjects provided", http.StatusBadRequest)
 		return
 	}
 
-	/*
-		// Load the customer schema
-		customerSchema, err := loadCustomerSchema("path/to/customer_schema.json") // Provide the correct path to customer schema
-		if err != nil {
-			log.Printf("Failed to load customer schema: %v", err)
-			http.Error(w, "Failed to load customer schema", http.StatusInternalServerError)
-			return
-		}
-	*/
+	// Enqueue the bulk request to RabbitMQ for processing.
+	if err := enqueueBulkIssuance(req); err != nil {
+		log.Printf("Failed to enqueue bulk issuance: %v", err)
+		http.Error(w, "Failed to process request", http.StatusInternalServerError)
+		return
+	}
+
+	// Log the request for debugging purposes
+	log.Printf("Received credential request: %+v", req)
 
 	// Resolve the issuer DID
 	log.Println("Here is the issuer DID: ", req.IssuerDid)
@@ -185,89 +181,115 @@ func issueCredential(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate credential ID and set issuance/expiration dates
-	credentialID := uuid.New().String()
+	//credentialID := uuid.New().String()
 	issuanceDate := time.Now().UTC().Format(time.RFC3339)
 	expirationDate := time.Now().AddDate(1, 0, 0).UTC().Format(time.RFC3339)
 
-	// Create the verifiable credential
-	credential := VerifiableCredential{
-		Context:           []string{"https://www.w3.org/2018/credentials/v1"},
-		Type:              []string{"VerifiableCredential"},
-		ID:                credentialID,
-		Issuer:            req.IssuerDid,
-		IssuanceDate:      issuanceDate,
-		ExpirationDate:    expirationDate,
-		CredentialSubject: req.Subject, // Use the dynamic subject here
+	log.Printf("*** I have: %d subjects in the request", len(req.Subjects))
+
+	// Loop through each subject and create a verifiable credential
+	for _, subject := range req.Subjects {
+		// Generate a unique credential ID for each subject
+		credentialID := uuid.New().String()
+
+		log.Printf("*** Here is the Unique Credential ID: %s", credentialID)
+
+		// Create the verifiable credential for the current subject
+		credential := VerifiableCredential{
+			Context:        []string{"https://www.w3.org/2018/credentials/v1"},
+			Type:           []string{"VerifiableCredential"},
+			ID:             "",
+			Issuer:         req.IssuerDid,
+			IssuanceDate:   issuanceDate,
+			ExpirationDate: expirationDate,
+			CredentialSubject: map[string]interface{}{
+				"subject": subject, // Use the current subject
+			},
+		}
+		// Serialize the credential to JSON
+		credentialJSON, err := json.Marshal(credential)
+		if err != nil {
+			log.Printf("Failed to marshal credential to JSON: %v", err)
+			http.Error(w, "Failed to process credential", http.StatusInternalServerError)
+			return
+		}
+		// Sign the credential
+		signature, err := signCredential(privateKey, credentialJSON)
+		if err != nil {
+			log.Printf("Failed to sign credential: %v", err)
+			http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
+			return
+		}
+
+		// Attach proof to the credential
+		credential.Proof = Proof{
+			Type:               "Ed25519Signature2018",
+			Created:            time.Now().UTC().Format(time.RFC3339),
+			ProofValue:         base64.StdEncoding.EncodeToString(signature),
+			ProofPurpose:       "assertionMethod",
+			VerificationMethod: req.IssuerDid + "#keys-1",
+		}
+
+		// Serialize the proof to JSON
+		proofJSON, err := json.Marshal(credential.Proof)
+		if err != nil {
+			log.Printf("Failed to marshal proof to JSON: %v", err)
+			http.Error(w, "Failed to process credential", http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("Inserting credential with DID: %s", credential.Issuer) // Assuming you use Issuer as DID
+
+		// Loop through each subject in the request
+		for _, subject := range req.Subjects {
+			// Extract subjectID from the current subject
+			subjectID, ok := subject["id"].(string) // Assuming the subject has an "id" field
+			if !ok {
+				log.Printf("Subject ID is missing or not a string for subject: %+v", subject)
+				http.Error(w, "Invalid subject data", http.StatusBadRequest)
+				return
+			}
+
+			// Store the credential in the database for each subject
+			_, err = db.Exec(context.Background(),
+				"INSERT INTO verifiable_credentials (did, issuer, credential, subject, issuance_date, expiration_date, proof) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+				subjectID,      // Use the extracted subject ID for each subject
+				req.IssuerDid,  // Issuer DID
+				credentialJSON, // Credential JSON
+				subject,        // Insert the current subject's properties
+				credential.IssuanceDate,
+				credential.ExpirationDate,
+				proofJSON, // Insert the proof JSON here
+			)
+
+			if err != nil {
+				if err.Error() == "ERROR: duplicate key value violates unique constraint \"verifiable_credentials_pkey\"" {
+					log.Printf("Duplicate key for subject %v. Attempting to regenerate credential ID.", subject)
+					// Optionally, you can generate a new credential ID and retry the insertion
+					continue // Skip or handle the error as needed
+				} else {
+					log.Printf("Error inserting credential for subject %v: %v", subject, err)
+				}
+			}
+		}
+
+		// Respond with the generated credential
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(credential); err != nil {
+			log.Printf("Failed to encode response: %v", err)
+			http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("Credential issued successfully: %v", credential)
 	}
-
-	// Serialize the credential to JSON
-	credentialJSON, err := json.Marshal(credential)
-	if err != nil {
-		log.Printf("Failed to marshal credential to JSON: %v", err)
-		http.Error(w, "Failed to process credential", http.StatusInternalServerError)
-		return
-	}
-
-	// Sign the credential
-	signature, err := signCredential(privateKey, credentialJSON)
-	if err != nil {
-		log.Printf("Failed to sign credential: %v", err)
-		http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
-		return
-	}
-
-	// Attach proof to the credential
-	credential.Proof = Proof{
-		Type:               "Ed25519Signature2018",
-		Created:            time.Now().UTC().Format(time.RFC3339),
-		ProofValue:         base64.StdEncoding.EncodeToString(signature),
-		ProofPurpose:       "assertionMethod",
-		VerificationMethod: req.IssuerDid + "#keys-1",
-	}
-
-	// Serialize the proof to JSON
-	proofJSON, err := json.Marshal(credential.Proof)
-	if err != nil {
-		log.Printf("Failed to marshal proof to JSON: %v", err)
-		http.Error(w, "Failed to process credential", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("Inserting credential with DID: %s", credential.Issuer) // Assuming you use Issuer as DID
-
-	// Store the credential in the database
-	_, err = db.Exec(context.Background(),
-		"INSERT INTO verifiable_credentials (id, did, issuer, credential, subject, issuance_date, expiration_date, proof) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		credential.ID,
-		subjectID, // Use the subject ID here
-		req.IssuerDid,
-		credentialJSON,
-		req.Subject, // Include the subject properties as JSON
-		credential.IssuanceDate,
-		credential.ExpirationDate,
-		proofJSON, // Insert the proof JSON here
-	)
-
-	if err != nil {
-		log.Printf("Failed to insert credential into database: %v", err)
-		http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
-		return
-	}
-
-	// Respond with the generated credential
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(credential); err != nil {
-		log.Printf("Failed to encode response: %v", err)
-		http.Error(w, "Failed to issue credential", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("Credential issued successfully: %v", credential)
 }
 
+/*
 func loadCustomerSchema(s string) {
 	panic("unimplemented")
 }
+*/
 
 // Additional functions for Vault, parsing, signing, etc.
 
