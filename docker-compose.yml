@@ -47,8 +47,15 @@ services:
       - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=root
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
     networks:
       - cred-net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   presentation-service:
     build:
@@ -150,6 +157,20 @@ services:
     command: server -dev  # Dev mode for testing, use production settings later
     depends_on:
       - postgres
+
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # RabbitMQ default port
+      - "15672:15672" # RabbitMQ management dashboard
+    networks:
+      - cred-net
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       
 networks:
   cred-net:
