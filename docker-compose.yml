@@ -1,180 +1,72 @@
 services:
-
   postgres:
-    image: postgres:15
-    container_name: postgres
+    image: postgres:16
     environment:
-      POSTGRES_USER: cred-service
-      POSTGRES_PASSWORD: cred-service-1
-      POSTGRES_DB: credential-service
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      POSTGRES_USER: credentialsvc
+      POSTGRES_PASSWORD: credentialsvc
+      POSTGRES_DB: credentialsvc
     ports:
       - "5432:5432"
-    networks:
-      - cred-net
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "cred-service", "-d", "credential-service"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U credentialsvc -d credentialsvc"]
+      interval: 5s
       timeout: 5s
       retries: 5
 
-  did-service:
+  issuer:
     build:
-      context: ./did-service
+      context: .
+      dockerfile: build/issuer.Dockerfile
+    environment:
+      ISSUER_HTTP_PORT: 8080
+      DEFAULT_TENANT_ID: default-tenant
+      ISSUER_LOG_LEVEL: info
+    ports:
+      - "8080:8080"
+    depends_on: []
+
+  verifier:
+    build:
+      context: .
+      dockerfile: build/verifier.Dockerfile
+    environment:
+      VERIFIER_HTTP_PORT: 8081
+      DEFAULT_TENANT_ID: default-tenant
+      VERIFIER_LOG_LEVEL: info
+      VERIFIER_DB_DSN: postgres://credentialsvc:credentialsvc@postgres:5432/credentialsvc?sslmode=disable
+      VERIFIER_USE_DB_TRUST_REGISTRY: "true"
+    ports:
+      - "8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
-    container_name: did-service
+
+  s2s-api:
+    build:
+      context: .
+      dockerfile: build/samples_api.Dockerfile
     environment:
-      DATABASE_URL: postgres://cred-service:cred-service-1@postgres:5432/credential-service
-      PORT: 8080
-      VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN: root
+      API_HTTP_PORT: 8082
     ports:
-      - "8080:8080"
-    networks:
-      - cred-net
-  
-  issuer-service:
-    build: 
-      context: ./issuer-service
-    container_name: issuer-service
-    ports:
-      - "8082:8080"
-    environment:
-      - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=root
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASS=guest
-    networks:
-      - cred-net
+      - "8082:8082"
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - verifier
 
-  presentation-service:
+  s2s-client:
     build:
-      context: ./presentation-service
-    container_name: presentation-service
-    ports:
-      - "8083:8080"
+      context: .
+      dockerfile: build/samples_client.Dockerfile
     environment:
-      DATABASE_URL: postgres://cred-service:cred-service-1@postgres:5432/credential-service
-      PORT: 8080
-    networks:
-      - cred-net
-
-  holder-service:
-    build:
-      context: ./holder-service
-    container_name: holder-service
-    environment:
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=root
-    ports:
-      - "8085:8080"
-    networks:
-      - cred-net
-  
-  verifier-service:
-    build:
-      context: ./verifier-service
-    container_name: verifier-service
-    ports:
-      - "8086:8080"
-    networks:
-      - cred-net
-  
-  resolver-service:
-    build:
-      context: ./resolver-service
-      dockerfile: Dockerfile
-    container_name: resolver-service
-    ports:
-      - "8087:8080"
-    networks:
-      - cred-net
-    environment:
-      - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
-  
-  schema-service:
-    #image: schema-service:latest  # You can change this to the built image tag or use 'build' if you are building locally
-    build:
-      context: ./schema-service  # Path to your schema-service source code
-      dockerfile: Dockerfile  # Optional, defaults to Dockerfile
-    container_name: schema-service
-    ports:
-      - "8088:8080"  # Expose port 8086 for external access
-    environment:
-      - DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
-    networks:
-      - cred-net  # Ensure it is part of the same network as other services
-  
-  anchor-service:
-    build:
-      context: ./anchor-service
-      dockerfile: Dockerfile # Assuming your Dockerfile is in the root directory
-    container_name: anchor-service
-    ports:
-      - "8089:8080"  # Expose the port 8080 externally
-    environment:
-      - GIN_MODE=release  # Set any additional environment variables if necessary
-      - FABRIC_CFG_PATH=/etc/hyperledger/fabric/config.yaml
-      - HYPERLEDGER_PEER_ADDRESS=peer0.org1.example.com:7051
-      - HYPERLEDGER_LOCAL_MSP_ID=Org1MSP
-      - HYPERLEDGER_MSP_CONFIG_PATH=/etc/hyperledger/fabric/msp
-      - HYPERLEDGER_ORDERER_ADDRESS=orderer.example.com:7050
-      - HYPERLEDGER_ORDERER_LOCAL_MSP_ID=OrdererMSP
-      - HYPERLEDGER_ORDERER_MSP_CONFIG_PATH=/etc/hyperledger/fabric/msp
-      - HYPERLEDGER_CHANNEL_NAME=mychannel
-      - FABRIC_USER=Admin@org1.example.com
-      - FABRIC_CHAINCODE_ID=basic
-    volumes:
-      - ./config:/etc/hyperledger/fabric
-    networks:
-      - cred-net  # Ensure it is on the same network as other microservices
-
-  # Add HashiCorp Vault service
-  vault:
-    image: vault:1.13.1
-    container_name: vault
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: root  # Development-only token
-      VAULT_ADDR: http://127.0.0.1:8200
-    ports:
-      - "8200:8200"
-    cap_add:
-      - IPC_LOCK
-    networks:
-      - cred-net
-    volumes:
-      - ./vault:/vault/file  # Optional, for persisting Vault data in development
-    command: server -dev  # Dev mode for testing, use production settings later
+      ISSUER_BASE_URL: http://issuer:8080
+      GATEWAY_AUTHORIZE_URL: http://verifier:8081
+      API_BASE_URL: http://s2s-api:8082
     depends_on:
-      - postgres
-
-  rabbitmq:
-    image: "rabbitmq:3-management"
-    container_name: rabbitmq
-    ports:
-      - "5672:5672"   # RabbitMQ default port
-      - "15672:15672" # RabbitMQ management dashboard
-    networks:
-      - cred-net
-    healthcheck:
-      test: ["CMD", "rabbitmqctl", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      
-networks:
-  cred-net:
+      - issuer
+      - verifier
+      - s2s-api
 
 volumes:
-  postgres_data:
-
+  pgdata:

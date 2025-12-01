@@ -23,6 +23,12 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 func InitializeRoutes() *mux.Router {
 	r := mux.NewRouter()
 
+	// Basic health endpoint
+	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}).Methods("GET")
+
 	// Version 1 routes
 	v1 := r.PathPrefix("/v1").Subrouter()
 	v1.Handle("/holder/receive", LoggingMiddleware(http.HandlerFunc(ReceiveCredential))).Methods("POST")

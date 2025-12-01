@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -21,6 +22,28 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 func InitializeRoutes() *mux.Router {
 
 	r := mux.NewRouter()
+
+	// Basic health endpoint
+	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}).Methods("GET")
+
+	// Readiness with DB ping if available
+	r.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		if db != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
+			defer cancel()
+			// pgxpool doesn't have Ping directly; simple query to validate connectivity
+			if err := db.Ping(ctx); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte("not ready"))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready"))
+	}).Methods("GET")
 
 	// Version 1 routes
 	v1 := r.PathPrefix("/v1").Subrouter()

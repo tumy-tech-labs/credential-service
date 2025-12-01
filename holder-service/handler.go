@@ -9,18 +9,39 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 )
 
-// VerifiableCredential structure aligned with W3C
+// VerifiableCredential represents a W3C-compliant VC model
+// This matches the canonical structure from the main service
 type VerifiableCredential struct {
-	Context           []string          `json:"@context"`
-	Type              []string          `json:"type"`
-	ID                string            `json:"id"`
-	Issuer            string            `json:"issuer"`
-	IssuanceDate      string            `json:"issuanceDate"`
-	ExpirationDate    string            `json:"expirationDate"`
-	CredentialSubject map[string]string `json:"credentialSubject"`
-	Proof             Proof             `json:"proof,omitempty"`
+	// W3C Standard Fields
+	Context           []string               `json:"@context"`
+	Type              []string               `json:"type"`
+	ID                string                 `json:"id"`
+	Issuer            string                 `json:"issuer"`
+	IssuanceDate      string                 `json:"issuanceDate"`
+	ExpirationDate    string                 `json:"expirationDate,omitempty"`
+	CredentialSubject map[string]interface{} `json:"credentialSubject"`
+	Proof             *Proof                 `json:"proof,omitempty"`
+	
+	// JWT Standard Claims (when used as JWT)
+	JTI               string    `json:"jti,omitempty"`   // JWT ID
+	ISS               string    `json:"iss,omitempty"`   // Issuer
+	SUB               string    `json:"sub,omitempty"`   // Subject 
+	IAT               int64     `json:"iat,omitempty"`   // Issued At
+	EXP               int64     `json:"exp,omitempty"`   // Expires At
+	NBF               int64     `json:"nbf,omitempty"`   // Not Before
+	
+	// Extension Fields
+	Scope             []string  `json:"scope,omitempty"`
+	DelegationChain   []string  `json:"delegation_chain,omitempty"`
+	
+	// Backward compatibility fields
+	Claims            map[string]interface{} `json:"claims,omitempty"`
+	Subject           string                 `json:"subject,omitempty"`
+	IssuedAt          time.Time              `json:"issued_at,omitempty"`
+	ExpiresAt         time.Time              `json:"expires_at,omitempty"`
 }
 
 // Proof structure for digital signature
@@ -47,7 +68,6 @@ type VerifiablePresentation struct {
 }
 
 func ReceiveCredential(w http.ResponseWriter, r *http.Request) {
-	log.Println("Entered the Receive Credentials Handler")
 	// Handle receiving a verifiable credential
 	var vc VerifiableCredential
 
@@ -56,8 +76,6 @@ func ReceiveCredential(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid credential format", http.StatusBadRequest)
 		return
 	}
-	// Debug:
-	log.Println("Debug: VC: ", vc)
 
 	// Store the credential in memory (for now)
 	StoreCredential(vc)
@@ -210,9 +228,7 @@ func fetchPrivateKeyFromVault(holderDID string) (ed25519.PrivateKey, error) {
 	}
 
 	// Define the path to your private key in Vault
-	log.Println("Holder DID: ", holderDID)
 	secretPath := fmt.Sprintf("secret/data/dids/%s", holderDID) // Adjust this path as needed
-	log.Println("Secret Path --> We stored the secrets here: ", secretPath)
 
 	// Read the private key from Vault
 	secret, err := client.Logical().Read(secretPath)

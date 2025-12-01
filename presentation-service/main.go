@@ -5,9 +5,19 @@ import (
 	"log"
 	"net/http"
 	"os"
+	
+	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/logging"
 )
 
 func main() {
+	// Initialize logging
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	logging.Init(logLevel)
+
 	// Initialize routes
 	routes := InitializeRoutes()
 
@@ -17,10 +27,10 @@ func main() {
 		port = "8080"
 	}
 
-	// Apply the logger middleware to all routes
-	loggedRoutes := LoggingMiddleware(routes)
+	// Apply standard middleware chain with comprehensive audit logging
+	handler := httpx.StandardMiddlewareChain()(routes)
 
 	// Start HTTP server
 	log.Printf("Presentation Service running on port %s\n", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), loggedRoutes))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), handler))
 }

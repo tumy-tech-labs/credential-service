@@ -1,0 +1,264 @@
+openapi: 3.1.0
+info:
+  title: Credential Service API
+  version: v1
+servers:
+  - url: https://api.example.com
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /readyz:
+    get:
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Service ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /v1/credentials/issue:
+    post:
+      summary: Issue a new verifiable credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueRequest'
+      responses:
+        '200':
+          description: Credential issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /v1/credentials/delegate:
+    post:
+      summary: Delegate a credential with scoped permissions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelegateRequest'
+      responses:
+        '200':
+          description: Delegated credential issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelegateResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /v1/credentials/verify:
+    post:
+      summary: Verify a credential chain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '200':
+          description: Verification succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+        '400':
+          description: Verification failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /v1/gateway/authorize:
+    post:
+      summary: Gateway authorization helper
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayAuthorizeRequest'
+      responses:
+        '200':
+          description: Authorization decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayAuthorizeResponse'
+        '403':
+          description: Authorization denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayAuthorizeResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        api_version:
+          type: string
+          example: v1
+    IssueRequest:
+      type: object
+      properties:
+        subject_did:
+          type: string
+        ttl_seconds:
+          type: integer
+        claims:
+          type: object
+        format:
+          type: string
+          description: Credential format, defaults to jwt-vc, set to sd-jwt for selective disclosure
+      required: [subject_did, ttl_seconds]
+    IssueResponse:
+      type: object
+      properties:
+        credential:
+          type: string
+        disclosures:
+          type: array
+          description: Only returned for SD-JWT issuance
+          items:
+            type: string
+        format:
+          type: string
+        api_version:
+          type: string
+      required: [credential, api_version]
+    DelegateRequest:
+      type: object
+      properties:
+        parent_credential:
+          type: string
+        delegate_did:
+          type: string
+        scope:
+          type: array
+          items:
+            type: string
+        ttl_seconds:
+          type: integer
+      required: [parent_credential, delegate_did, scope, ttl_seconds]
+    DelegateResponse:
+      type: object
+      properties:
+        credential:
+          type: string
+        api_version:
+          type: string
+      required: [credential, api_version]
+    VerifyRequest:
+      type: object
+      properties:
+        credential:
+          type: string
+        credentials:
+          type: array
+          items:
+            type: string
+        expected_audience:
+          type: string
+        disclosures:
+          type: array
+          description: SD-JWT disclosures to be verified
+          items:
+            type: string
+        format:
+          type: string
+    VerifyResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        subject:
+          type: string
+        issuer:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        acting_on_behalf_of:
+          type: string
+        delegation_depth:
+          type: integer
+        api_version:
+          type: string
+      required: [valid, subject, issuer, expires_at, delegation_depth, api_version]
+    GatewayAuthorizeRequest:
+      type: object
+      properties:
+        credential:
+          type: string
+        credentials:
+          type: array
+          items:
+            type: string
+        expected_audience:
+          type: string
+        want_synthetic_jwt:
+          type: boolean
+    GatewayAuthorizeResponse:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+        subject:
+          type: string
+        acting_on_behalf_of:
+          type: string
+        delegation_depth:
+          type: integer
+        claims:
+          type: object
+        reason:
+          type: string
+        synthetic_jwt:
+          type: string
+        api_version:
+          type: string
+      required: [allowed, api_version]
+    APIError:
+      type: object
+      properties:
+        error:
+          type: string
+        description:
+          type: string
+        code:
+          type: string
+        api_version:
+          type: string
+      required: [error, api_version]

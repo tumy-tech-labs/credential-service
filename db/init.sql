@@ -66,3 +66,50 @@ CREATE TABLE schemas (
 -- Create an index on organization_did for faster lookups
 CREATE INDEX idx_organization_did ON schemas (organization_did);
 
+-- Add tenants table (from migration 0002_add_tenants.sql)
+CREATE TABLE IF NOT EXISTS tenants (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    enabled BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tenant_trusted_issuers (
+    tenant_id TEXT NOT NULL,
+    issuer_did TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, issuer_did)
+);
+
+-- Add trusted_issuers table (from migration 0001_create_trusted_issuers.sql)
+CREATE TABLE IF NOT EXISTS trusted_issuers (
+    id SERIAL PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    issuer_did TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (tenant_id, issuer_did)
+);
+
+-- Add policies table (from migration 0003_create_policies.sql)
+CREATE TABLE IF NOT EXISTS policies (
+    id SERIAL PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    effect TEXT NOT NULL,
+    actions TEXT[] NOT NULL,
+    resources TEXT[] NOT NULL,
+    subjects TEXT[] NOT NULL,
+    conditions JSONB,
+    priority INT DEFAULT 100,
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_policies_tenant ON policies(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_policies_tenant_priority ON policies(tenant_id, priority);
+

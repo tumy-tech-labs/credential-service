@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  # Main credential service (verifier/gateway)
+  credential-service:
+    build:
+      context: .
+      dockerfile: build/verifier.Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Metrics
+      - METRICS_TYPE=prometheus
+      - METRICS_NAMESPACE=demo_credential_service
+      
+      # Redis
+      - REDIS_ADDR=redis:6379
+      - GATEWAY_CACHE=true
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REQUESTS_PER_WINDOW=1000
+      - RATE_LIMIT_WINDOW_SECONDS=60
+      
+      # Database
+      - DB_DSN=postgres://credential_user:credential_pass@postgres:5432/credential_service?sslmode=disable
+      - USE_DB_TRUST_REGISTRY=true
+      
+      # Service
+      - HTTP_PORT=8080
+      - DEFAULT_TENANT_ID=demo-tenant
+      - TENANCY_MODE=single
+      - LOG_LEVEL=info
+      
+      # Security
+      - JWT_ISSUER=did:web:demo.example.com
+      - MAX_DELEGATION_DEPTH=3
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - credential-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=credential_service
+      - POSTGRES_USER=credential_user
+      - POSTGRES_PASSWORD=credential_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - credential-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U credential_user -d credential_service"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - credential-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Prometheus monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - credential-net
+    depends_on:
+      - credential-service
+
+  # Grafana dashboards
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - credential-net
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  credential-net:
+    driver: bridge

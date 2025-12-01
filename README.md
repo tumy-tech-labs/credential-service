@@ -1,569 +1,476 @@
 # Credential Service
 
-A robust microservice designed for creating, managing, and verifying **W3C-compliant Verifiable Credentials (VCs)**. This service allows organizations to issue credentials, link them to **Decentralized Identifiers (DIDs)**, and enable secure, privacy-preserving verification across multiple platforms.
+Issue, delegate, verify, and authorize W3C Verifiable Credentials (VCs) with DID-backed keys and a gateway that can mint synthetic JWTs for legacy APIs.
 
-## Key Features
+## Architecture
 
-- **Verifiable Credentials**: Issue credentials for a wide range of use cases, including identity verification, employment, education, and more, with full compliance to **W3C standards**.
-- **Decentralized Identifiers (DIDs)**: Associate VCs with **DIDs**, enabling portable and self-sovereign identities that users control.
-- **Interoperability & Portability**: Supports cross-industry use, allowing credentials to be reused and verified across different platforms without re-registration or data duplication.
-- **Privacy by Design**: Minimal disclosure and secure storage, ensuring that only necessary information is shared during verifications.
-- **Revocation Support**: Includes mechanisms to revoke credentials, ensuring that only valid credentials can be verified.
-- **Verifiable Presentations**: Generate and verify presentations of credentials to prove claims in a trusted and decentralized manner.
-- **Microservice Architecture**: Built as part of a modular and containerized microservice ecosystem, easily integratable into broader decentralized identity solutions.
-- **Issuer, Holder, Verifier Roles**: The service supports a complete lifecycle of identity management by addressing the needs of issuers, credential holders, and verifiers.
+### Centralized Deployment (Enterprise)
 
-## Table of Contents
+Suitable for single-organization deployments where issuer and verifier share infrastructure:
 
-1. [Features](#features)
-2. [Requirements](#requirements)
-3. [Installation](#installation)
-4. [Usage](#usage)
-5. [Configuration](#configuration)
-6. [Testing](#testing)
-7. [Contributing](#contributing)
-8. [License](#license)
-9. [Contact](#contact)
-
-## Features
-
-- **Create Verifiable Credentials**: Issue credentials with unique IDs, expiration dates, and digital signatures.
-- **Manage DIDs**: Integrate with the DID management service to use existing DIDs as issuers.
-- **Dynamic Payloads**: Include issuer DID and subject details in the POST request payload.
-- **REST API**: Expose endpoints for creating, retrieving, and revoking credentials.
-
-Sequence Diagram:
-
-```mermaid
-sequenceDiagram
-    participant Issuer
-    participant DIDService
-    participant IssuerService
-    participant Holder
-    participant PresentationService
-    participant Verifier
-    participant VerificationService
-
-    Issuer->>DIDService: POST /dids (Create DID for Holder)
-    DIDService-->>Issuer: Return DID
-    Issuer->>IssuerService: POST /credentials (Issue Credential with Holder DID)
-    IssuerService-->>Issuer: Return Credential
-    Issuer->>Holder: Send Credential
-    Holder->>PresentationService: POST /presentations (Create Presentation with Credential)
-    PresentationService-->>Holder: Return Presentation ID
-    Holder->>Verifier: Send Presentation ID
-    Verifier->>VerificationService: GET /presentations/{id} (Request Presentation)
-    VerificationService->>PresentationService: Fetch Presentation Data
-    PresentationService-->>VerificationService: Return Presentation Data
-    VerificationService->>DIDService: GET /dids/resolver (Resolve DID)
-    DIDService-->>VerificationService: Return DID Document
-    VerificationService->>VerificationService: Verify Presentation
-    VerificationService-->>Verifier: Return Verification Result
-    Verifier->>Holder: Return Verification Status
+```
+┌─────────────┐         ┌──────────────┐         ┌─────────────┐
+│   Issuer    │         │  Verifier    │         │   Gateway   │
+│   :8080     │────────▶│   :8081      │◀────────│  (AuthZ)    │
+│             │  Trust  │              │  Verify │             │
+│ - Issue VCs │         │ - Verify VCs │         │ - Rate Limit│
+│ - DID Mgmt  │         │ - Trust Reg  │         │ - Caching   │
+│ - Key Mgmt  │         │ - Policy Eng │         │ - Decisions │
+└─────────────┘         └──────────────┘         └─────────────┘
+       │                        │                        │
+       │                        │                        │
+       └────────────────────────┴────────────────────────┘
+                                │
+                          ┌─────▼─────┐         ┌──────────┐
+                          │ Postgres  │         │  Redis   │
+                          │   :5432   │         │  :6379   │
+                          │           │         │          │
+                          │ - Tenants │         │ - Cache  │
+                          │ - Policies│         │ - Limits │
+                          │ - Trust   │         │          │
+                          └───────────┘         └──────────┘
 ```
 
-Data Flow Diagram:
-
-```mermaid
-graph TD
-    IssuerService["Issuer Service"]
-    HolderService["Holder Service"]
-    VerifierService["Verifier Service"]
-    ResolverService["Resolver Service"]
-    DIDService["DID Service"]
-
-    subgraph DID Creation
-        IssuerService -->|Creates DID| DIDService
-    end
-
-    subgraph Credential Issuance
-        IssuerService -->|Issues Credential| HolderService
-    end
-
-    subgraph Credential Verification
-        HolderService -->|Presents Credential| VerifierService
-    end
-
-    VerifierService -->|Queries| ResolverService
-    IssuerService -->|Queries| ResolverService
-    DIDService -->|Stores DID Document| ResolverService
-
-    ResolverService -->|Resolves DID| IssuerService
-    ResolverService -->|Resolves DID| VerifierService
-```
-
-## Requirements
-
-- Go 1.19 or higher
-- PostgreSQL 12+
-- Docker 20+
-
-## Installation
-
-Step-by-step instructions on how to install the project.
-
-1. Clone the repository:
-
-  ```bash
-  git clone https://github.com/tumy-tech-labs/credential-service.git
-  cd credential-service
-  ```
-
-## Usage
-
-1. Start up in Docker
-  
-  ```bash
-  docker compose up -d --build
-  ```
-
-### Create DID
-
-This is currently limited to creating a DID for Issuers.  When creating the DID it will generate a private and public key and store the private key in a hashicorp vault.
-
-TODO: Create DID's for Holders and Verifiers as well.
-
-**Request:**
-
-```bash
-curl -X POST http://localhost:8080/v1/dids \
--H "Content-Type: application/json" \
--d '{
-  "organization_id": "org123"
-}'
-```
-
-**Response:**
-
-```json
-{
-    "@context": "https://www.w3.org/ns/did/v1",
-    "id": "did:key:z6M52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k",
-    "publicKey": [
-        {
-            "id": "did:key:z6M52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k#keys-1",
-            "type": "Ed25519VerificationKey2018",
-            "controller": "did:key:z6M52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k",
-            "publicKeyBase58": "52fX64ItBn_w-GybPu9P6U3-kOO1F5MSpCfHrheKb0k"
-        }
-    ],
-    "createdAt": "2024-10-07T22:47:10Z",
-    "organization_id": "orgABC"
-}
-```
-
-### Resolve DID
-
-**Request:**
-
-```bash
-curl -X GET http://localhost:8080/v1/dids/resolver?did=did:key:z6MnewDIDhere
-```
-
-**Response:**
-
-```json
-{
-  "did": "did:key:z6MnewDIDhere",
-  "document": { ... } // DID Document details
-}
-```
-
-### Issue Credentials
-
-When Issuing the credentials, provide the DID that you created in the previous steps.
-
-**Request Payload:**
-
-```json
-{
-  "issuerDid": "did:key:z6MyourIssuerDIDhere",
-  "subject": {
-    "name": "Jane Doe",
-    "email": "jane.doe@example.com",
-    "phone": "+3214567890"
-  }
-}
-```
-
-**Example Request:**
-
-```bash
-curl -X POST http://localhost:8080/v1/credentials \
--H "Content-Type: application/json" \
--d '{
-  "issuerDid": "did:key:z6MyourIssuerDIDhere",
-  "subject": {
-    "name": "Jane Doe",
-    "email": "jane.doe@example.com",
-    "phone": "+3214567890"
-  }
-}'
-```
-
-**Response:**
-
-```json
-{
-  "@context": "https://www.w3.org/2018/credentials/v1",
-  "id": "credential-id",
-  "type": ["VerifiableCredential", "EmploymentCredential"],
-  "issuer": "did:key:z6MyourIssuerDIDhere",
-  "issuanceDate": "2024-09-05T00:00:00Z",
-  "expirationDate": "2025-09-05T00:00:00Z",
-  "credentialSubject": {
-    "id": "did:key:z6MsubjectDIDhere",
-    "name": "Jane Doe",
-    "email": "jane.doe@example.com",
-    "phone": "+3214567890"
-  },
-  "signature": "i9CASyhzQD1nDL/gpzacq0etT5jCAuH7MPHYU9WA7p/0yrirtD2Y4Mdg8G8dEr6kMgqenpWt5MP/5MaYkhUtDg=="
-}
-```
-
-### Get All Credentials
-
-This is currently not working.
-
-**Request:**
-
-```bash
-curl -X GET http://localhost:8080/v1/credentials
-```
-
-**Response:**
-
-```json
-[
-  {
-    "id": "credential-id",
-    "issuer": "did:key:z6MyourIssuerDIDhere",
-    "subject": { ... },
-    "issuanceDate": "2024-09-05T00:00:00Z",
-    "expirationDate": "2025-09-05T00:00:00Z",
-    "signature": "signature-value"
-  },
-  ...
-]
-```
-
-### Revoke Credentials
-
-**Request:**
-
-```bash
-curl -X DELETE http://localhost:8080/v1/credentials/credential-id
-```
-
-**Response:**
-
-```json
-{
-  "message": "Credential revoked successfully."
-}
-```
-
-### Create Presentation
-
-**Request:**
-
-```bash
-curl -X POST http://localhost:8080/v1/presentations \
--H "Content-Type: application/json" \
--d '{
-  "holderDid": "did:key:z6MholderDIDhere",
-  "credentials": ["credential-id"]
-}'
-```
-
-**Response:**
-
-```json
-{
-  "presentationId": "presentation-id"
-}
-```
-
-### Get Presentation
-
-**Request:**
-
-```bash
-curl -X GET http://localhost:8080/v1/presentations/presentation-id
-```
-
-**Response:**
-
-```json
-{
-  "presentationId": "presentation-id",
-  "credentials": [ ... ]
-}
-```
-
-### Verification Service
-
-**Request:**
-
-```bash
-curl -X GET http://localhost:8080/v1/verifications/presentation-id
-```
-
-**Response:**
-
-```json
-{
-  "presentationId": "presentation-id",
-  "verificationStatus": "verified"
-}
-```
-
-### Testing the Vault Connection
-
-To test the connection to Vault, you can run the following command inside your Docker container:
-
-```bash
-curl -X GET http://localhost:8200/v1/sys/health \
--H "X-Vault-Token: your-vault-token"
-```
-
-Replace `your-vault-token` with your actual Vault token. A successful response will confirm that the Vault service is healthy.
-
-## Configuration
-
-Details about any configuration options (e.g., environment variables, config files).
-
-**Environment Variables:**
-
-```bash
-DATABASE_URL=postgres://cred-service:cred-service-1@postgres:5432/credential-service
-PORT=8080
-VAULT_ADDR=http://vault:8200
-VAULT_TOKEN=your-vault-token
-```
-
-## Holder Service
-
-The Holder Service is a microservice responsible for receiving, storing, and presenting verifiable credentials issued by the Issuer Service. It ensures compliance with W3C standards and provides an API for interaction with the credentials.
-
-- **Receive Credentials**: Accepts verifiable credentials from the Issuer Service and stores them in memory.
-- **Present Credentials**: Allows users to present stored credentials for verification to third parties.
-- **Validation**: Validates incoming credentials to ensure they meet required standards.
-
-### API Endpoints
-
-#### 1. Receive Credential
-
-- **Endpoint**: `/v1/holder/receive`
-- **Method**: `POST`
-- **Description**: Receives a verifiable credential and stores it in memory.
-- **Request Body**:
-  
-  ```json
-  {
-    "@context": [
-      "https://www.w3.org/2018/credentials/v1"
-    ],
-    "type": [
-      "VerifiableCredential"
-    ],
-    "id": "string",
-    "issuer": "string",
-    "issuanceDate": "string",
-    "expirationDate": "string",
-    "credentialSubject": {
-      "email": "string",
-      "id": "string",
-      "name": "string",
-      "phone": "string"
-    },
-    "proof": {
-      "type": "string",
-      "created": "string",
-      "proofValue": "string",
-      "proofPurpose": "string",
-      "verificationMethod": "string"
-    }
-  }
-  ```
-
-#### 2. Present Credential
-
-- **Endpoint**: `/v1/holder/present`
-- **Method**: `GET`
-- **Description**: Presents all stored credentials for verification.
-- **Response**:
-  - Returns an array of stored credentials.
-
-### Getting Started
-
-1. **Run the Holder Service**:
-Ensure Docker is running and use the following command to start the service:
-
-   ```bash
-   docker-compose up --build
-   ```
-
-2. **Test the API**:
-Use tools like `curl` or Postman to interact with the API:
-
-- To receive a credential:
-
-     ```bash
-     curl -X POST http://localhost:8082/v1/holder/receive -d '{"your":"data"}' -H "Content-Type: application/json"
-     ```
-
-- To present stored credentials:
-  
-     ```bash
-     curl -X GET http://localhost:8082/v1/holder/present
-     ```
-
-### Notes
-
-- The Holder Service currently stores credentials in memory for simplicity. Future implementations may include persistent storage.
-- Ensure that the service adheres to W3C standards for verifiable credentials.
-
-## Testing
-
-Instructions for running tests, if applicable.
-
-**Example:**
-
-```bash
-go test ./...
-```
-
-Here's an updated section for the `README.md` that covers the new Verifier service:
+**Use Case**: Single enterprise, shared database, centralized trust management
 
 ---
 
-## Verifier Service
+### Distributed Deployment (Decentralized)
 
-The **Verifier Service** is responsible for validating Verifiable Presentations (VPs) received from the Holder Service. It ensures the authenticity and integrity of the Verifiable Credentials (VCs) within the VP and verifies the proofs attached by both the issuer and the holder. This service adheres to the W3C standards for Verifiable Credentials and Verifiable Presentations.
+Suitable for multi-organization or cross-domain scenarios using DID resolution:
 
-### Key Features
+```
+┌─────────────────────────────────┐     ┌─────────────────────────────────┐
+│      Organization A             │     │      Organization B             │
+│                                 │     │                                 │
+│  ┌─────────────┐  ┌──────────┐ │     │  ┌──────────────┐  ┌──────────┐│
+│  │   Issuer    │  │Postgres A││     │  │  Verifier    │  │Postgres B││
+│  │   :8080     │  │  :5432   ││     │  │   :8081      │  │  :5432   ││
+│  │             │  │          ││     │  │              │  │          ││
+│  │ - Issue VCs │  │- Tenants ││     │  │ - Trust Reg  │  │- Tenants ││
+│  │ - DID: A    │  │- Keys    ││     │  │ - Policies   │  │- Policies││
+│  └─────────────┘  └──────────┘ │     │  │ - DID: B     │  │- Trust   ││
+│         │                       │     │  └──────────────┘  └──────────┘│
+│         │                       │     │         ▲                       │
+└─────────┼───────────────────────┘     └─────────┼───────────────────────┘
+          │                                       │
+          │  VC Issued                           │ Verification
+          │  (signed with did:jwk:A)             │ Request
+          │                                       │
+          └──────────────────────────────────────┘
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │   DID Resolution Layer    │
+                    │                           │
+                    │ - did:jwk  (self-signed)  │
+                    │ - did:web  (DNS-hosted)   │
+                    │                           │
+                    │ No pre-shared keys needed │
+                    └───────────────────────────┘
+```
 
-- Accepts Verifiable Presentations (VPs) from the Holder.
-- Validates the signature (proof) from both the holder and issuer.
-- Checks the integrity of the Verifiable Credential (VC), including expiration and issuer authenticity.
-- Built as a microservice to integrate into the credential verification ecosystem.
+**Key Differences**:
+- **No Shared Database**: Each organization maintains its own Postgres instance
+- **DID Resolution**: Verifier fetches public keys by resolving issuer's DID (e.g., `did:jwk:...` or `did:web:orgA.com`)
+- **Distributed Trust**: Verifier maintains local trust registry listing trusted issuer DIDs
+- **No Pre-Configuration**: Organizations don't exchange keys in advance—DIDs are resolved at verification time
 
-### API Endpoints
+**Use Case**: Multi-org federation, supply chain, cross-domain identity, zero-trust networks
 
-#### 1. `POST /verifier/verify`
+---
 
-This endpoint receives a Verifiable Presentation (VP) from the Holder service and validates the included Verifiable Credentials.
+**Flow**: Issuer generates credentials with `did:jwk` or `did:web` identifiers → Verifier resolves DID to public key → checks trust registry → evaluates policies → Gateway caches decisions
 
-- **Request**
-  The payload is a JSON object containing a Verifiable Presentation (VP). The VP includes one or more Verifiable Credentials (VCs) issued by an issuer and presented by the holder.
-  
-  Example Request Payload:
+## What this project is
+A Go-based microservice stack for issuing JWT-encoded VCs, verifying delegation chains, enforcing tenant-scoped authorization policies, and translating trusted credentials into standard `Bearer` tokens for downstream services.
 
+## Features at a Glance
+- **Standards Compliant:** W3C VC-JWT format with `typ: "vc+jwt"`, RFC 7638 JWK Thumbprints for key IDs, EdDSA (Ed25519) and ES256 (P-256) signing algorithms.
+- **Issuer (port 8080):** Issue root and delegated credentials, plus a one-time bootstrap endpoint for local admin setup.
+- **Verifier & Gateway (port 8081):** Verify credential chains, evaluate policies, and optionally mint synthetic JWTs.
+- **Sample API (port 8082):** A demo `/orders` endpoint protected by synthetic JWTs.
+- **Delegation & Agents:** Constrain scope/TTL when minting child credentials so agents can act on behalf of users.
+- **Trust Registry:** Per-tenant trusted issuer list backed by Postgres or in-memory store; default issuer is pre-seeded for local runs.
+- **Policy Engine:** Hybrid RBAC/ABAC rules with resource/action matching and claim-based conditions.
+- **DID Resolution:** Built-in `did:jwk` and `did:web` resolvers so verifiers can fetch public keys directly from DIDs.
+- **Observability & Safety:** Structured audit logging, readiness probes, optional Redis caching/rate-limiting, and Prometheus metrics hooks.
+- **SDKs:** First-party Go and Node.js clients for issuing, verifying, and gateway authorization.
+
+## Key Concepts
+- **Decentralized Identifiers (DIDs):** Public-key based identifiers (`did:jwk`, `did:web`) resolved at verification time—no manual key exchange.
+- **Verifiable Credentials (VCs):** W3C VC-JWT compliant credentials where JWT claims (`iss`, `sub`, `iat`, `exp`) are at the top level with the VC nested under a `vc` claim. Delegated VCs must tighten scope/TTL relative to parents.
+- **W3C VC-JWT Format:** Credentials follow the W3C VC-JWT specification with `typ: "vc+jwt"` header and proper payload structure:
   ```json
   {
-    "@context": ["https://www.w3.org/2018/credentials/v1"],
-    "type": ["VerifiablePresentation"],
-    "verifiableCredential": [
-      {
-        "@context": ["https://www.w3.org/2018/credentials/v1"],
-        "type": ["VerifiableCredential"],
-        "id": "977a9b78-f48b-4d50-a847-10b33b802877",
-        "issuer": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
-        "issuanceDate": "2024-09-21T21:57:25Z",
-        "expirationDate": "2025-09-21T21:57:25Z",
-        "credentialSubject": {
-          "id": "did:example:1dab09d7-9dee-4013-8812-fc401794c672",
-          "email": "johndoe@example.com",
-          "name": "John Doe",
-          "phone": "+1234567890"
-        },
-        "proof": {
-          "type": "Ed25519Signature2018",
-          "created": "2024-09-21T21:57:25Z",
-          "proofValue": "U0lHTkFUVVJF",
-          "proofPurpose": "assertionMethod",
-          "verificationMethod": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4#keys-1"
-        }
-      }
-    ],
-    "holder": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4",
-    "proof": {
-      "type": "Ed25519Signature2018",
-      "created": "2024-09-21T22:05:30Z",
-      "proofPurpose": "authentication",
-      "verificationMethod": "did:key:z6MsjAXl18xWy-kgyxn2OJiu3EhSCd6-mnWWztrxhD_1w4#keys-1",
-      "proofValue": "SOME_PROOF_SIGNATURE"
+    "iss": "did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjExcVlBWU...",
+    "sub": "did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6ImFiY2RlZm...",
+    "iat": 1234567890,
+    "exp": 1234571490,
+    "vc": {
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      "type": ["VerifiableCredential"],
+      "issuer": "did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjExcVlBWU...",
+      "credentialSubject": { "scope": "read:orders" }
     }
   }
   ```
+- **RFC 7638 JWK Thumbprints:** Key identifiers (`kid`) are computed using RFC 7638 JWK Thumbprint for standards-compliant key identification.
+- **Gateway & Synthetic JWTs:** `/v1/gateway/authorize` returns an allow/deny decision and can mint a short-lived JWT so downstream services can keep using `Authorization: Bearer <token>`.
+- **Tenancy:** `X-Tenant-ID` header (or the default tenant in single-tenant mode) scopes trust registries and policies; Docker Compose runs in single-tenant mode by default.
+- **Policy Evaluation:** Requests are authorized against tenant policies using action/resource matching plus optional scope/claim conditions.
 
-- **Response**:
-  The response will indicate whether the presentation and credentials were successfully verified or not.
+## Quick Start
 
-  Example Success Response:
+Prereqs: Docker and Docker Compose v2. Choose your path:
 
-  ```json
-  {
-    "status": "success",
-    "message": "Verifiable Presentation and Credentials are valid."
-  }
-  ```
+### 🚀 Fast Track (3 minutes)
 
-  Example Failure Response:
+Get running with minimal setup:
 
-  ```json
-  {
-    "status": "error",
-    "message": "Invalid signature or credential."
-  }
-  ```
+```bash
+# 1. Start services
+git clone https://github.com/bradtumy/credential-service.git
+cd credential-service
+docker compose up --build -d
 
-### Running the Verifier Service
+# 2. Generate a test DID
+make keygen
+ALICE_DID=$(./bin/keygen -did-only)
 
-1. **Starting the Service**:
-   You can start the verifier service using Docker by building the container as specified in the `docker-compose.yml` file. The service listens on port `8083` by default.
+# 3. Issue a credential
+VC=$(curl -s -X POST http://localhost:8080/v1/credentials/issue \
+  -H "Content-Type: application/json" \
+  -d '{"subject_did":"'$ALICE_DID'","ttl_seconds":600,"claims":{"role":"tester"}}' \
+  | jq -r .credential)
 
-2. **Sending a Verification Request**:
-To send a Verifiable Presentation for verification, you can use `curl` or any HTTP client:
+# 4. Add issuer to trust registry
+ISSUER_DID=$(docker logs credential-service-issuer-1 2>&1 | grep "issuer_did" | tail -1 | sed 's/.*issuer_did=\([^ ]*\).*/\1/')
+curl -s -X POST http://localhost:8081/v1/trust/issuers \
+  -H "Content-Type: application/json" \
+  -d '{"issuer_did":"'$ISSUER_DID'"}'
 
+# 5. Verify and authorize
+curl -s -X POST http://localhost:8081/v1/gateway/authorize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credential": "'$VC'",
+    "expected_audience": "sample-api",
+    "resource": "orders",
+    "action": "read",
+    "want_synthetic_jwt": true
+  }' | jq
+```
+
+✅ **Done!** You should see `"allowed": true` with a synthetic JWT. Skip to [What's Next](#whats-next) or continue for production setup.
+
+### 🏗️ Production Setup (15 minutes)
+
+Full walkthrough with detailed explanations:
+
+1. **Clone & start the stack**
    ```bash
-   curl -X POST http://localhost:8083/v1/verifier/verify \
-   -H "Content-Type: application/json" \
-   -d '{
-       "@context": ["https://www.w3.org/2018/credentials/v1"],
-       "type": ["VerifiablePresentation"],
-       "verifiableCredential": [ ... ],
-       "holder": "did:key:holderDID",
-       "proof": { ... }
-   }'
+   git clone https://github.com/bradtumy/credential-service.git
+   cd credential-service
+   docker compose up --build
    ```
 
-3. **Debugging**:
+2. **Hit the health endpoints** to confirm the services are reachable:
+   ```bash
+   curl http://localhost:8080/healthz   # issuer
+   curl http://localhost:8081/readyz    # verifier + DB readiness
+   curl http://localhost:8082/orders -i # expect 401 without token
+   ```
 
-The verifier service includes basic logging for tracking verification attempts and their outcomes. Use the logs to troubleshoot failed verifications.
+3. **Generate a DID for your subject (optional)**
+   
+   You can generate DIDs three ways:
+   
+   **Option A: Use the API**
+   ```bash
+   # Generate a DID via HTTP API (only returns the DID, not the private key for security)
+   ALICE_DID=$(curl -s -X POST http://localhost:8080/v1/keys/generate \
+     -H "Content-Type: application/json" \
+     -d '{"algorithm": "EdDSA"}' | jq -r '.did')
+   echo "Generated DID: $ALICE_DID"
+   ```
+   
+   **Option B: Use the CLI tool**
+   ```bash
+   # Build and use the keygen CLI
+   make keygen
+   ./bin/keygen -output alice-key.pem
+   # Outputs: DID: did:jwk:eyJrdHk... and saves private key to alice-key.pem
+   ```
+   
+   **Option C: Use the SDK**
+   ```go
+   // Go SDK
+   import "github.com/bradtumy/credential-service/sdk-go"
+   keypair, _ := sdk.GenerateDIDJWK("EdDSA")
+   fmt.Println("DID:", keypair.DID)
+   ```
+   ```javascript
+   // Node.js SDK
+   const { generateDIDJWK } = require('@credential-service/sdk-nodejs/keygen');
+   const keypair = await generateDIDJWK('EdDSA');
+   console.log('DID:', keypair.did);
+   ```
+   
+4. **Add the issuer to the verifier's trust registry**
 
-### W3C Compliance
+   The issuer and verifier use separate signing keys. The verifier needs to trust the issuer's DID:
+   
+   ```bash
+   # Extract issuer DID from logs
+   ISSUER_DID=$(docker logs credential-service-issuer-1 2>&1 | \
+     grep -o 'issuer_did":"did:jwk:[^"]*' | head -1 | cut -d'"' -f3)
+   echo "Issuer DID: $ISSUER_DID"
+   
+   # Add issuer to verifier's trust registry
+   curl -X POST http://localhost:8081/v1/trust/issuers \
+     -H "Content-Type: application/json" \
+     -d '{"issuer_did": "'$ISSUER_DID'"}' | jq
+   ```
+   
+5. **Issue a credential via the issuer API (port 8080)**
 
-The Verifier Service is designed in compliance with the [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) and [Verifiable Presentations](https://www.w3.org/TR/vc-data-model/#presentations-0) standards.
+   ```bash
+   # If you generated a DID in step 3, use $ALICE_DID
+   # Otherwise, use this example DID for quick testing
+   ALICE_DID="${ALICE_DID:-did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IjExcVlBWUtGMWJuRjNyeEh0Q19FN2I4N1ZRdHJhRUp2WVU0aGRxNFU5SWsifQ}"
+   
+   VC=$(curl -s -X POST http://localhost:8080/v1/credentials/issue \
+     -H "Content-Type: application/json" \
+     -d "{
+       \"subject_did\": \"$ALICE_DID\",
+       \"ttl_seconds\": 600,
+       \"claims\": {\"aud\": \"sample-api\", \"scope\": \"read:orders\"}
+     }" | jq -r '.credential')
+
+   # The response includes a W3C VC-JWT compliant signed credential with typ: "vc+jwt"
+   # JWT header: {"alg":"EdDSA","typ":"vc+jwt"}
+   # JWT payload has standard claims (iss, sub, iat, exp) at top level
+   # with the VC structure nested under the "vc" claim per W3C spec
+   ```
+
+6. **Verify the credential through the verifier API (port 8081)**
+   
+   ```bash
+   curl -s -X POST http://localhost:8081/v1/credentials/verify \
+     -H "Content-Type: application/json" \
+     -d '{"credential": "'$VC'", "expected_audience": "sample-api"}' | jq
+
+   # Expected response:
+   # { "active": true, "issuer": "did:jwk:...", "subject": "did:jwk:..." }
+   ```
+
+7. **Authorize through the gateway API and mint a synthetic JWT**
+   ```bash
+   SYNTH=$(curl -s -X POST http://localhost:8081/v1/gateway/authorize \
+     -H "Content-Type: application/json" \
+     -d '{
+       "credential": "'$VC'",
+       "expected_audience": "sample-api",
+       "want_synthetic_jwt": true,
+       "resource": "orders",
+       "action": "read"
+     }' | tee /dev/tty | jq -r '.synthetic_jwt')
+   ```
+
+8. **Call the protected demo API using the synthetic JWT**
+   ```bash
+   curl -s http://localhost:8082/orders \
+     -H "Authorization: Bearer $SYNTH" | jq
+   ```
+
+The verifier ships with a default policy that allows `read` on `orders` for any subject. For production use, you'll want to add trusted issuers to the trust registry via the admin API (see [GATEWAY_INTEGRATION.md](docs/GATEWAY_INTEGRATION.md)).
+
+### Troubleshooting
+
+**"untrusted_issuer" error:**
+- Ensure you completed step 4 (adding issuer to trust registry)
+- Check that issuer and verifier are both running: `docker ps`
+- Verify issuer DID: `docker logs credential-service-issuer-1 | grep issuer_did`
+- The trust registry is in-memory by default and resets on restart
+
+**"unexpected audience" error:**
+- Ensure the `aud` claim in your credential matches `expected_audience` in verification
+- Check credential payload: `echo $VC | cut -d'.' -f2 | base64 -d`
+
+**Services won't start:**
+```bash
+# Check for port conflicts
+lsof -i :8080 -i :8081 -i :8082
+
+# View service logs
+docker compose logs issuer
+docker compose logs verifier
+
+# Rebuild from scratch
+docker compose down -v
+docker compose up --build
+```
+
+**Slow verification performance:**
+- Enable Redis caching: Set `VERIFIER_GATEWAY_CACHE=true` and `REDIS_ADDR=redis:6379`
+- Check metrics: `curl http://localhost:8081/metrics`
+- Review audit logs for bottlenecks
+
+### Delegation in one command (optional)
+Mint a constrained agent credential and authorize it:
+```bash
+# Using did:jwk for the agent/delegate
+delegated=$(curl -s -X POST http://localhost:8080/v1/credentials/delegate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parent_credential": "'$VC'",
+    "delegate_did": "did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6InhYeVpBYmNEZWZHaGlKa2xNbm9QcXJTdFV2V3h5WjAxMjM0NTY3ODlBQkMifQ",
+    "scope": ["read:orders"],
+    "ttl_seconds": 300
+  }' | jq -r '.credential')
+
+curl -s -X POST http://localhost:8081/v1/gateway/authorize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credentials": ["'$VC'", "'$delegated'"],
+    "expected_audience": "sample-api",
+    "resource": "orders",
+    "action": "read"
+  }' | jq
+```
+
+## Architecture Overview
+- **Issuer service (`cmd/issuer`, :8080):** Signs VCs, supports delegation, exposes `/v1/setup/bootstrap` for one-time admin credential creation, and serves `/healthz`/`/readyz`.
+- **Verifier + Gateway (`cmd/verifier`, :8081):** Verifies chains via DID resolution, enforces trust registries, evaluates policies, and returns authorization decisions/synthetic JWTs; exposes `/metrics` when Prometheus is enabled.
+- **Sample API (`samples/s2s/api-service`, :8082):** Consumes synthetic JWTs on `/orders` to demonstrate legacy compatibility.
+- **Postgres (5432, Compose only):** Stores tenant data, policies, and trusted issuers when DB-backed stores are enabled.
+
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for module layout, [TENANCY.md](docs/TENANCY.md) for tenant scoping, [POLICY_ENGINE.md](docs/POLICY_ENGINE.md) for authorization rules, and [GATEWAY_INTEGRATION.md](docs/GATEWAY_INTEGRATION.md) for gateway usage.
+
+## Documentation
+- [api/openapi.yaml](api/openapi.yaml) — OpenAPI 3.1 for issuer, verifier, gateway, and health endpoints.
+- [docs/API_OVERVIEW.md](docs/API_OVERVIEW.md) — Endpoint summaries, sample payloads, and the happy-path flow.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Module layout and component relationships.
+- [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) — Local development environment setup and tooling.
+- [docs/TESTING.md](docs/TESTING.md) — Testing strategy and how to run the suites.
+- [docs/SECURITY.md](docs/SECURITY.md) — Security model, threat considerations, and hardening tips.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — Planned features and upcoming work.
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) — Project change history.
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — Contribution guidelines and development workflow.
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — Expected standards for participation.
+- [docs/AGENTS.md](docs/AGENTS.md) — Delegation and on-behalf-of semantics for agents.
+- [docs/POLICY_ENGINE.md](docs/POLICY_ENGINE.md) — Policy schema, evaluation order, and admin endpoints under `/v1/admin/policies`.
+- [docs/TENANCY.md](docs/TENANCY.md) — Single vs. multi-tenant behavior and tenant resolution rules.
+- [docs/GATEWAY_INTEGRATION.md](docs/GATEWAY_INTEGRATION.md) — How `/v1/gateway/authorize` plugs into reverse proxies and mints synthetic JWTs.
+- [docs/GATEWAY_HARDENING.md](docs/GATEWAY_HARDENING.md) — Security considerations when deploying the gateway.
+- [docs/METRICS_IMPLEMENTATION.md](docs/METRICS_IMPLEMENTATION.md) — Prometheus metrics exposed by the services.
+- [docs/KMS_DEPLOYMENT.md](docs/KMS_DEPLOYMENT.md) — Guidance for deploying with KMS integrations.
+- [docs/PRODUCTION.md](docs/PRODUCTION.md) — Production readiness checklist and deployment notes.
+- [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) — Orientation for new developers and repo layout.
+- [docs/DEVELOPER_GUIDE_IMPROVEMENTS.md](docs/DEVELOPER_GUIDE_IMPROVEMENTS.md) — Proposed updates to the developer guide.
+- [docs/DID_RESOLVER_IMPROVEMENTS_SUMMARY.md](docs/DID_RESOLVER_IMPROVEMENTS_SUMMARY.md) — Summary of DID resolver improvements.
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — Threat modeling notes and mitigations.
+
+## SDKs
+- **Go (`sdk/go`):**
+  ```go
+  client := &sdk.Client{BaseURL: "http://localhost:8080"}
+  issued, _ := client.IssueCredential(ctx, sdk.IssueRequest{SubjectDID: "did:example:alice", TTLSeconds: 600})
+  decision, _ := client.GatewayAuthorize(ctx, sdk.GatewayAuthorizeRequest{Credential: issued.Credential, WantSyntheticJWT: true})
+  ```
+- **Node.js (`sdk/node`):**
+  ```js
+  import { Client } from '@credential-service/sdk'
+  const client = new Client({ baseUrl: 'http://localhost:8080' })
+  const issued = await client.issueCredential({ subject_did: 'did:example:alice', ttl_seconds: 600 })
+  const decision = await client.gatewayAuthorize({ credential: issued.credential, want_synthetic_jwt: true })
+  ```
+
+## SD-JWT and issuance policies
+- **Selective Disclosure:** Request `format: "sd-jwt"` when issuing to receive a signed SD-JWT plus disclosure list. Example:
+  ```bash
+  curl -sX POST http://localhost:8080/v1/credentials/issue \
+    -d '{"subject_did":"did:example:alice","ttl_seconds":600,"claims":{"email":"alice@example.com","scope":["read"]},"format":"sd-jwt"}'
+  ```
+  Verify by POSTing the SD-JWT, `format: "sd-jwt"`, and `disclosures` back to `/v1/credentials/verify`.
+- **Issuance policy:** The issuer enforces `ISSUER_POLICY_MAX_TTL_SECONDS`, `ISSUER_POLICY_ALLOWED_SCOPES`, and `ISSUER_POLICY_REQUIRED_CLAIMS` during issuance/delegation to prevent over-broad credentials.
+- **Audit storage:** When `ISSUER_AUDIT_DB_DSN` is set the issuer persists audit rows to Postgres in addition to structured logs whenever credentials are minted.
+
+## Roadmap / Current Status
+- **Implemented:** Issuance/delegation endpoints, SD-JWT issuance and verification alongside JWT VCs, policy-guarded TTL/scope/claim validation, audit trails with optional Postgres persistence, DID-based verification, gateway authorization with synthetic JWT minting, seeded trust registry for local runs, tenant-scoped policy engine with Postgres or in-memory stores, health/readiness probes, optional Prometheus metrics and Redis-backed caching/rate-limiting.
+- **Upcoming (see [ROADMAP.md](docs/ROADMAP.md)):** Deeper KMS/Vault integrations and expanded integration/e2e testing.
+
+## Local Development
+
+### Fast Iteration Workflow
+```bash
+# Run tests with coverage
+make test-coverage
+
+# Run only specific package tests
+go test ./internal/domain/... -v
+
+# Watch mode for development (requires entr or similar)
+find . -name '*.go' | entr -r go test ./internal/domain/...
+
+# Build all services
+make build-all
+
+# Run linter
+make lint
+
+# Security scan
+make sec
+```
+
+### Debugging Tips
+```bash
+# Enable debug logging
+export ISSUER_LOG_LEVEL=debug
+export VERIFIER_LOG_LEVEL=debug
+
+# Run services locally (without Docker)
+go run ./cmd/issuer &
+go run ./cmd/verifier &
+
+# Check service health
+curl http://localhost:8080/healthz
+curl http://localhost:8081/readyz
+```
+
+### Common Development Tasks
+
+**Generate a test DID quickly:**
+```bash
+make keygen && ./bin/keygen -did-only
+```
+
+**Test credential issuance:**
+```bash
+# Using the test script
+./scripts/test-issue.sh
+
+# Or manually
+ALICE_DID=$(./bin/keygen -did-only)
+curl -X POST http://localhost:8080/v1/credentials/issue \
+  -d '{"subject_did":"'$ALICE_DID'","ttl_seconds":600,"claims":{"test":true}}'
+```
+
+**Database reset (for testing):**
+```bash
+docker compose down -v && docker compose up -d postgres
+# Wait for DB to be ready
+sleep 3
+# Run migrations manually if needed
+```
 
 ## Contributing
-
-How others can contribute to the project.
-
-1. Fork the repository.
-2. Create a new branch (git checkout -b feature-branch).
-3. Commit your changes (git commit -am 'Add new feature').
-4. Push the branch (git push origin feature-branch).
-5. Open a Pull Request.
+1. Create a feature branch: `git checkout -b feature/your-change`.
+2. Make changes and add tests.
+3. Run the test suite: `make test` (or `go test ./...` for verbose output).
+4. Run linter and security checks: `make lint sec`
+5. Test the Quick Start guide end-to-end to ensure your changes work.
+6. Commit and open a Pull Request.
 
 ## License
-
-This project is licensed under the Apache2 License - see the LICENSE file for details.
-
-## Contact
-
-How to connect for support or issues.
-
-Email: <brad@tumy-tech.com>  
-GitHub: tumy-tech-labs
+Apache License 2.0. See [LICENSE](LICENSE) for details.
