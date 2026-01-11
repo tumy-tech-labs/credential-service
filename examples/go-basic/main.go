@@ -10,7 +10,11 @@ import (
 )
 
 func main() {
-	client := &sdk.Client{BaseURL: "http://localhost:8080"}
+	client := &sdk.Client{
+		IssuerURL:   "http://localhost:8080",
+		VerifierURL: "http://localhost:8081",
+		GatewayURL:  "http://localhost:8081",
+	}
 	ctx := context.Background()
 
 	issued, err := client.IssueCredential(ctx, sdk.IssueRequest{
@@ -22,7 +26,7 @@ func main() {
 		log.Fatalf("issue credential: %v", err)
 	}
 
-	decision, err := client.GatewayAuthorize(ctx, sdk.GatewayAuthorizeRequest{
+	decision, err := client.Authorize(ctx, sdk.AuthorizeRequest{
 		Credential:       issued.Credential,
 		ExpectedAudience: "example-api",
 		WantSyntheticJWT: true,

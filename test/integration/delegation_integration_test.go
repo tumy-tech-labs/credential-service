@@ -12,7 +12,7 @@ import (
 
 	"github.com/bradtumy/credential-service/internal/config"
 	"github.com/bradtumy/credential-service/internal/domain"
-	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/keystore"
 	"github.com/bradtumy/credential-service/internal/metrics"
 )
@@ -33,7 +33,7 @@ func TestDelegationIntegration(t *testing.T) {
 
 	// Issuer server
 	issuerMux := http.NewServeMux()
-	httpx.RegisterIssuerRoutes(issuerMux, store, issuerCfg, nil)
+	httpserver.RegisterIssuerRoutes(issuerMux, store, issuerCfg, nil)
 	issuerServer := httptest.NewServer(issuerMux)
 	t.Cleanup(issuerServer.Close)
 
@@ -48,11 +48,11 @@ func TestDelegationIntegration(t *testing.T) {
 	}
 
 	verifierMux := http.NewServeMux()
-	httpx.RegisterVerifierRoutes(verifierMux, resolver, registry, verifierCfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
+	httpserver.RegisterVerifierRoutes(verifierMux, resolver, registry, verifierCfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
 	verifierServer := httptest.NewServer(verifierMux)
 	t.Cleanup(verifierServer.Close)
 
-	issueBody := httpx.IssueRequest{
+	issueBody := httpserver.IssueRequest{
 		SubjectDID: "did:jwk:owner",
 		TTLSeconds: int64((10 * time.Minute).Seconds()),
 		Claims:     map[string]interface{}{"scope": []string{"read", "write"}},
@@ -68,12 +68,12 @@ func TestDelegationIntegration(t *testing.T) {
 	if issueResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 from issuer, got %d", issueResp.StatusCode)
 	}
-	var issued httpx.IssueResponse
+	var issued httpserver.IssueResponse
 	if err := json.NewDecoder(issueResp.Body).Decode(&issued); err != nil {
 		t.Fatalf("decode issue response: %v", err)
 	}
 
-	delegateReq := httpx.DelegateRequest{
+	delegateReq := httpserver.DelegateRequest{
 		ParentCredential: issued.Credential,
 		DelegateDID:      "did:jwk:agent",
 		Scope:            []string{"read"},
@@ -90,12 +90,12 @@ func TestDelegationIntegration(t *testing.T) {
 	if delegateResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 from delegate, got %d", delegateResp.StatusCode)
 	}
-	var delegated httpx.IssueResponse
+	var delegated httpserver.IssueResponse
 	if err := json.NewDecoder(delegateResp.Body).Decode(&delegated); err != nil {
 		t.Fatalf("decode delegate response: %v", err)
 	}
 
-	verifyReq := httpx.VerifyRequest{Credentials: []string{issued.Credential, delegated.Credential}}
+	verifyReq := httpserver.VerifyRequest{Credentials: []string{issued.Credential, delegated.Credential}}
 	verifyPayload, _ := json.Marshal(verifyReq)
 	verifyResp, err := http.Post(verifierServer.URL+"/v1/credentials/verify", "application/json", bytes.NewReader(verifyPayload))
 	if err != nil {
@@ -108,7 +108,7 @@ func TestDelegationIntegration(t *testing.T) {
 		t.Fatalf("expected 200 from verifier, got %d", verifyResp.StatusCode)
 	}
 
-	var verifyBody httpx.VerifyResponse
+	var verifyBody httpserver.VerifyResponse
 	if err := json.NewDecoder(verifyResp.Body).Decode(&verifyBody); err != nil {
 		t.Fatalf("decode verify response: %v", err)
 	}

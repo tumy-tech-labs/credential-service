@@ -12,7 +12,7 @@ import (
 
 	"github.com/bradtumy/credential-service/internal/config"
 	"github.com/bradtumy/credential-service/internal/domain"
-	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/keystore"
 	"github.com/bradtumy/credential-service/internal/metrics"
 	"github.com/bradtumy/credential-service/internal/policy"
@@ -80,9 +80,9 @@ func TestMultiTenantEndToEnd(t *testing.T) {
 	policyEngine := &recordingEngine{allow: true}
 
 	mux := http.NewServeMux()
-	httpx.RegisterIssuerRoutes(mux, keyStore, cfg, nil)
-	httpx.RegisterVerifierRoutes(mux, resolver, trustRegistry, cfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
-	httpx.RegisterGatewayRoutes(mux, &httpx.GatewayConfig{
+	httpserver.RegisterIssuerRoutes(mux, keyStore, cfg, nil)
+	httpserver.RegisterVerifierRoutes(mux, resolver, trustRegistry, cfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
+	httpserver.RegisterGatewayRoutes(mux, &httpserver.GatewayConfig{
 		Resolver:        resolver,
 		Registry:        trustRegistry,
 		PolicyEngine:    policyEngine,
@@ -92,9 +92,9 @@ func TestMultiTenantEndToEnd(t *testing.T) {
 		Now:             time.Now,
 	})
 
-	handler := httpx.RequestContext(httpx.TenantMiddleware(tenant.Resolver{Mode: tenant.ModeMulti, DefaultTenantID: cfg.DefaultTenantID, Store: tenantStore}, mux))
+	handler := httpserver.RequestContext(httpserver.TenantMiddleware(tenant.Resolver{Mode: tenant.ModeMulti, DefaultTenantID: cfg.DefaultTenantID, Store: tenantStore}, mux))
 
-	issuePayload := httpx.IssueRequest{SubjectDID: "did:example:alice", TTLSeconds: 600}
+	issuePayload := httpserver.IssueRequest{SubjectDID: "did:example:alice", TTLSeconds: 600}
 	issueBody, _ := json.Marshal(issuePayload)
 	issueReq := httptest.NewRequest(http.MethodPost, "/v1/credentials/issue", bytes.NewReader(issueBody))
 	issueReq.Header.Set("X-Tenant-ID", "tenant-a")
@@ -103,13 +103,13 @@ func TestMultiTenantEndToEnd(t *testing.T) {
 	if issueRec.Code != http.StatusOK {
 		t.Fatalf("issue credential status: %d", issueRec.Code)
 	}
-	var issueResp httpx.IssueResponse
+	var issueResp httpserver.IssueResponse
 	_ = json.NewDecoder(issueRec.Body).Decode(&issueResp)
 	if issueResp.Credential == "" {
 		t.Fatalf("expected credential token")
 	}
 
-	verifyPayload := httpx.VerifyRequest{Credential: issueResp.Credential}
+	verifyPayload := httpserver.VerifyRequest{Credential: issueResp.Credential}
 	verifyBody, _ := json.Marshal(verifyPayload)
 
 	verifyReq := httptest.NewRequest(http.MethodPost, "/v1/credentials/verify", bytes.NewReader(verifyBody))
@@ -128,7 +128,7 @@ func TestMultiTenantEndToEnd(t *testing.T) {
 		t.Fatalf("verify tenant-b expected forbidden, got %d", verifyRecB.Code)
 	}
 
-	gatewayPayload := httpx.GatewayAuthorizeRequest{Credential: issueResp.Credential, Resource: "sample-api", Action: "invoke"}
+	gatewayPayload := httpserver.GatewayAuthorizeRequest{Credential: issueResp.Credential, Resource: "sample-api", Action: "invoke"}
 	gatewayBody, _ := json.Marshal(gatewayPayload)
 	gatewayReq := httptest.NewRequest(http.MethodPost, "/v1/gateway/authorize", bytes.NewReader(gatewayBody))
 	gatewayReq.Header.Set("X-Tenant-ID", "tenant-a")
@@ -137,7 +137,7 @@ func TestMultiTenantEndToEnd(t *testing.T) {
 	if gatewayRec.Code != http.StatusOK {
 		t.Fatalf("gateway status: %d", gatewayRec.Code)
 	}
-	var gatewayResp httpx.GatewayAuthorizeResponse
+	var gatewayResp httpserver.GatewayAuthorizeResponse
 	_ = json.NewDecoder(gatewayRec.Body).Decode(&gatewayResp)
 	if gatewayResp.TenantID != "tenant-a" || !gatewayResp.Allowed {
 		t.Fatalf("unexpected gateway response: %+v", gatewayResp)

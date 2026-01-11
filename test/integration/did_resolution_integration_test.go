@@ -14,7 +14,7 @@ import (
 
 	"github.com/bradtumy/credential-service/internal/config"
 	"github.com/bradtumy/credential-service/internal/domain"
-	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/keystore"
 	"github.com/bradtumy/credential-service/internal/metrics"
 )
@@ -38,7 +38,7 @@ func TestDistributedDIDResolution(t *testing.T) {
 
 	// Create issuer service
 	issuerMux := http.NewServeMux()
-	httpx.RegisterIssuerRoutes(issuerMux, issuerStore, issuerCfg, nil)
+	httpserver.RegisterIssuerRoutes(issuerMux, issuerStore, issuerCfg, nil)
 	issuerServer := httptest.NewServer(issuerMux)
 	t.Cleanup(issuerServer.Close)
 
@@ -68,12 +68,12 @@ func TestDistributedDIDResolution(t *testing.T) {
 	}
 
 	verifierMux := http.NewServeMux()
-	httpx.RegisterVerifierRoutes(verifierMux, resolver, trustRegistry, verifierCfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
+	httpserver.RegisterVerifierRoutes(verifierMux, resolver, trustRegistry, verifierCfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
 	verifierServer := httptest.NewServer(verifierMux)
 	t.Cleanup(verifierServer.Close)
 
 	// Step 1: Organization A issues a credential
-	issueReq := httpx.IssueRequest{
+	issueReq := httpserver.IssueRequest{
 		SubjectDID: "did:jwk:subject123",
 		TTLSeconds: int64((5 * time.Minute).Seconds()),
 		Claims:     map[string]interface{}{"scope": []string{"read"}, "aud": "org-b-api"},
@@ -90,13 +90,13 @@ func TestDistributedDIDResolution(t *testing.T) {
 		t.Fatalf("expected 200, got %d", issueResp.StatusCode)
 	}
 
-	var issueResult httpx.IssueResponse
+	var issueResult httpserver.IssueResponse
 	if err := json.NewDecoder(issueResp.Body).Decode(&issueResult); err != nil {
 		t.Fatalf("decode issue response: %v", err)
 	}
 
 	// Step 2: Organization B initially doesn't trust Organization A (should fail)
-	verifyReq := httpx.VerifyRequest{
+	verifyReq := httpserver.VerifyRequest{
 		Credential:       issueResult.Credential,
 		ExpectedAudience: "org-b-api",
 	}
@@ -130,7 +130,7 @@ func TestDistributedDIDResolution(t *testing.T) {
 		t.Fatalf("expected 200 after trust established, got %d", verifyResp2.StatusCode)
 	}
 
-	var verifyResult httpx.VerifyResponse
+	var verifyResult httpserver.VerifyResponse
 	if err := json.NewDecoder(verifyResp2.Body).Decode(&verifyResult); err != nil {
 		t.Fatalf("decode verify response: %v", err)
 	}

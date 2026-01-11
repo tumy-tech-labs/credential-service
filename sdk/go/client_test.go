@@ -6,11 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
+	"time"
 )
 
-func TestIssueCredential(t *testing.T) {
+func TestIssueVCFormatsRequest(t *testing.T) {
 	var captured IssueRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/credentials/issue" {
@@ -22,102 +22,83 @@ func TestIssueCredential(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(IssueResponse{
-			Credential:       "token123",
-			Subject:          captured.SubjectDID,
-			ActingOnBehalfOf: captured.SubjectDID,
-			DelegationDepth:  0,
-			Claims:           captured.Claims,
-		})
+		_ = json.NewEncoder(w).Encode(IssueResponse{Credential: "vc.jwt", Format: captured.Format})
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
-	client := &Client{BaseURL: srv.URL}
-	req := IssueRequest{SubjectDID: "did:example:alice", TTLSeconds: 600, Claims: map[string]interface{}{"aud": "example"}}
-	resp, err := client.IssueCredential(context.Background(), req)
+	client := &Client{IssuerURL: srv.URL}
+	resp, err := client.IssueVC(context.Background(), IssueRequest{SubjectDID: "did:example:1", TTLSeconds: 60})
 	if err != nil {
-		t.Fatalf("IssueCredential returned error: %v", err)
+		t.Fatalf("IssueVC returned error: %v", err)
 	}
-
-	if resp.Credential != "token123" || resp.Subject != "did:example:alice" {
+	if captured.Format != "jwt-vc" {
+		t.Fatalf("expected format jwt-vc, got %s", captured.Format)
+	}
+	if resp.Credential != "vc.jwt" {
 		t.Fatalf("unexpected response: %+v", resp)
-	}
-	if !reflect.DeepEqual(resp.Claims, req.Claims) {
-		t.Fatalf("claims mismatch: %+v", resp.Claims)
-	}
-	if captured.TTLSeconds != req.TTLSeconds {
-		t.Fatalf("ttl mismatch: %d", captured.TTLSeconds)
 	}
 }
 
-func TestDelegateCredential(t *testing.T) {
+func TestIssueSDJWTIncludesDisclosures(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/credentials/delegate" {
+		_ = json.NewEncoder(w).Encode(IssueResponse{Credential: "sd.jwt", Disclosures: []string{"disc"}, Format: "sd-jwt"})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := &Client{IssuerURL: srv.URL}
+	resp, err := client.IssueSDJWT(context.Background(), IssueRequest{SubjectDID: "did:example:1", TTLSeconds: 60})
+	if err != nil {
+		t.Fatalf("IssueSDJWT returned error: %v", err)
+	}
+	if resp.Format != "sd-jwt" || len(resp.Disclosures) != 1 {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
+func TestVerifyUsesVerifierURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/credentials/verify" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(DelegateResponse{Credential: "delegated", DelegationDepth: 1, ActingOnBehalfOf: "did:parent"})
+		_ = json.NewEncoder(w).Encode(VerifyResponse{Valid: true, Subject: "did:sub", DelegationDepth: 0, ExpiresAt: time.Now()})
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
-	client := &Client{BaseURL: srv.URL}
-	resp, err := client.DelegateCredential(context.Background(), DelegateRequest{ParentCredential: "parent", DelegateDID: "did:child", Scope: []string{"read"}, TTLSeconds: 300})
-	if err != nil {
-		t.Fatalf("DelegateCredential returned error: %v", err)
-	}
-	if resp.Credential != "delegated" || resp.DelegationDepth != 1 {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-}
-
-func TestVerify(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(VerifyResponse{Valid: true, Subject: "did:subject", DelegationDepth: 0, Claims: map[string]interface{}{"role": "admin"}})
-	}))
-	defer srv.Close()
-
-	client := &Client{BaseURL: srv.URL}
+	client := &Client{VerifierURL: srv.URL}
 	resp, err := client.Verify(context.Background(), "token")
 	if err != nil {
 		t.Fatalf("Verify returned error: %v", err)
 	}
-	if !resp.Valid || resp.Subject != "did:subject" {
+	if !resp.Valid || resp.Subject != "did:sub" {
 		t.Fatalf("unexpected response: %+v", resp)
-	}
-	if resp.Claims["role"] != "admin" {
-		t.Fatalf("missing claim role")
 	}
 }
 
-func TestGatewayAuthorize(t *testing.T) {
-	var captured GatewayAuthorizeRequest
+func TestAuthorizeFallsBackToVerifierURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
-			t.Fatalf("decode request: %v", err)
+		if r.URL.Path != "/v1/gateway/authorize" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(GatewayAuthorizeResponse{Allowed: true, Subject: "did:subject", ActingOnBehalfOf: "did:parent", DelegationDepth: 1, Claims: map[string]interface{}{"scope": []string{"read"}}, SyntheticJWT: "jwt"})
+		var req AuthorizeRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.Resource != "orders" || req.Action != "read" {
+			t.Fatalf("unexpected request payload: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(AuthorizeResponse{Allowed: true, SyntheticJWT: "synthetic"})
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
-	client := &Client{BaseURL: srv.URL}
-	req := GatewayAuthorizeRequest{Credential: "token", ExpectedAudience: "api", WantSyntheticJWT: true}
-	resp, err := client.GatewayAuthorize(context.Background(), req)
+	client := &Client{VerifierURL: srv.URL}
+	resp, err := client.Authorize(context.Background(), AuthorizeRequest{Credential: "cred", Resource: "orders", Action: "read", WantSyntheticJWT: true})
 	if err != nil {
-		t.Fatalf("GatewayAuthorize returned error: %v", err)
+		t.Fatalf("Authorize returned error: %v", err)
 	}
-	if !resp.Allowed || resp.SyntheticJWT != "jwt" {
+	if !resp.Allowed || resp.SyntheticJWT != "synthetic" {
 		t.Fatalf("unexpected response: %+v", resp)
-	}
-	if !captured.WantSyntheticJWT || captured.ExpectedAudience != "api" {
-		t.Fatalf("unexpected request captured: %+v", captured)
 	}
 }
 
-func TestErrorMapping(t *testing.T) {
+func TestDecodeAPIErrorMapsStatus(t *testing.T) {
 	cases := []struct {
 		status int
 		want   error
@@ -131,13 +112,22 @@ func TestErrorMapping(t *testing.T) {
 	for _, tc := range cases {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(tc.status)
+			_ = json.NewEncoder(w).Encode(APIError{Error: "boom"})
 		}))
-		client := &Client{BaseURL: srv.URL}
-		_, err := client.IssueCredential(context.Background(), IssueRequest{SubjectDID: "did:ex", TTLSeconds: 1})
+		client := &Client{IssuerURL: srv.URL}
+		_, err := client.IssueVC(context.Background(), IssueRequest{SubjectDID: "did:ex", TTLSeconds: 1})
 		srv.Close()
 
 		if !errors.Is(err, tc.want) {
 			t.Fatalf("status %d: expected %v got %v", tc.status, tc.want, err)
 		}
+	}
+}
+
+func TestMissingBaseURL(t *testing.T) {
+	client := &Client{}
+	_, err := client.IssueVC(context.Background(), IssueRequest{SubjectDID: "did:ex", TTLSeconds: 1})
+	if err == nil {
+		t.Fatalf("expected error for missing issuer url")
 	}
 }

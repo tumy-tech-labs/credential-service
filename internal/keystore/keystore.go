@@ -2,10 +2,10 @@ package keystore
 
 import (
 	"crypto"
-	"crypto/ed25519"
-	"crypto/rand"
 	"fmt"
 	"sync"
+
+	"github.com/bradtumy/credential-service/internal/did"
 )
 
 // KeyStore abstracts retrieval of signing keys for tenants.
@@ -17,12 +17,14 @@ type KeyStore interface {
 type MemoryKeyStore struct {
 	mu   sync.Mutex
 	keys map[string]crypto.Signer
+	dids map[string]did.DIDDocument
 }
 
 // NewMemoryKeyStore constructs a MemoryKeyStore instance.
 func NewMemoryKeyStore() *MemoryKeyStore {
 	return &MemoryKeyStore{
 		keys: make(map[string]crypto.Signer),
+		dids: make(map[string]did.DIDDocument),
 	}
 }
 
@@ -39,19 +41,17 @@ func (m *MemoryKeyStore) GetSigningKey(tenantID string) (crypto.Signer, error) {
 		return signer, nil
 	}
 
-	// Generate secure random key for production use
-	// Note: For production, keys should be loaded from secure storage (KMS/HSM)
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	doc, err := did.NewDIDJWK()
 	if err != nil {
-		return nil, fmt.Errorf("generate ed25519 key: %w", err)
+		return nil, fmt.Errorf("generate did document: %w", err)
 	}
 
-	// TODO: For deterministic testing, use environment variable:
-	// if os.Getenv("DETERMINISTIC_KEYS") == "true" {
-	//     seed := sha256.Sum256([]byte("test-seed-" + tenantID))
-	//     priv = ed25519.NewKeyFromSeed(seed[:])
-	// }
+	signer, err := doc.CurrentSigner()
+	if err != nil {
+		return nil, fmt.Errorf("load signer from did: %w", err)
+	}
 
-	m.keys[tenantID] = priv
-	return priv, nil
+	m.keys[tenantID] = signer
+	m.dids[tenantID] = doc
+	return signer, nil
 }

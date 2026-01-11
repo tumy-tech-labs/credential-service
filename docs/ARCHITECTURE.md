@@ -1,35 +1,39 @@
 # Architecture
 
-The credential-service repository now follows an idiomatic Go layout that separates binaries from shared libraries.
+The repository now follows an idiomatic Go layout that separates binaries, service wiring, and shared libraries.
 
-## Binaries
-- `cmd/issuer`: starts the credential issuer HTTP service and worker.
-- `cmd/verifier`: starts the credential verifier HTTP service.
+## Repository layout
 
-## Internal Modules
-- `internal/domain`: core verifiable credential types, issuance helpers, and multi-tenant context primitives.
-- `internal/httpx`: HTTP helpers for error responses and middleware (request/tenant IDs).
-- `internal/logging`: structured logging setup shared by binaries.
-- `internal/metrics`: stubs for verifier metrics instrumentation.
-- `internal/config`: lightweight environment-based configuration loader.
-- `internal/keystore`: abstraction for retrieving signing keys for tenants.
-- `internal/issuer`: issuer-specific routing, queueing, and issuance orchestration.
-- `internal/verifier`: verification handlers that wrap domain validation.
-- `internal/storage`: storage helpers including the Postgres-backed trust registry.
+```
+cmd/                 # CLI entrypoints
+  issuer/            # main for the issuer service
+  verifier/          # main for the verifier + gateway service
+  keygen/            # helper for generating DIDs/keys
+services/            # service wiring and HTTP server setup
+  issuer/            # builds the issuer HTTP server
+  verifier/          # builds the verifier + gateway HTTP server
+internal/            # shared libraries (not importable by SDKs)
+  config/            # environment-driven configuration
+  crypto/            # key handling, signers, and key rotation
+  domain/            # core VC, delegation, and trust registry types
+  httpserver/        # HTTP handlers, middleware, and route registration
+  keystore/          # pluggable keystore backends
+  metrics/, policy/, ratelimit/, storage/, tenant/ ...
+sdk/go               # Go SDK (module path: github.com/bradtumy/credential-service/sdk/go)
+sdk/node             # Node SDK
+```
 
-## Data Flow (simplified)
-1. **Issue**: HTTP request hits `cmd/issuer` → router (`internal/issuer`) → credential built/signature attached (`internal/domain`) → stored (PostgreSQL) and queued (RabbitMQ).
-2. **Store/Queue**: Credentials persisted via `pgx` (if configured) and issuance jobs emitted to RabbitMQ for background processing.
-3. **Verify**: Presentation posted to `cmd/verifier` → handler (`internal/verifier`) → validation rules in `internal/domain`.
-4. **Future**: Trust registry and delegation rules will extend `internal/domain` and share middleware/config utilities.
+## Services
+- **Issuer (`cmd/issuer` + `services/issuer`)**: issues VC-JWT and SD-JWT credentials, handles bootstrap flows, and writes audit logs when configured.
+- **Verifier & Gateway (`cmd/verifier` + `services/verifier`)**: verifies credentials, enforces policies, mints synthetic JWTs, exposes admin routes, and publishes Prometheus metrics.
+- **Sample API (`samples/` binaries)**: demonstrates protecting APIs with the gateway-minted JWTs; Docker Compose keeps behavior the same.
 
-## Trust Registry Storage
-- A Postgres-backed trust registry is available via `internal/storage.PGTrustRegistry`.
-- Deployments using Postgres must create the `trusted_issuers` table (see `migrations/0001_create_trusted_issuers.sql`).
+## Shared code
+- Core credential, delegation, and DID helpers live in `internal/domain`.
+- HTTP handler and middleware utilities live in `internal/httpserver` and are reused by both services.
+- Cross-cutting concerns such as configuration (`internal/config`), keystore selection (`internal/keystore`), metrics (`internal/metrics`), and persistence (`internal/storage`) remain centralized for reuse.
 
-## Delegation and Agent Identity
-- Credentials can be delegated from one DID to another, enabling agents to act with constrained authority.
-- Each delegation step must shrink scope and shorten time-to-live; children cannot outlive or outrange parents.
-- Verification enforces a maximum delegation depth to cap chain length.
-- Verifier responses surface both the active subject and who they are acting on behalf of.
-- This makes agent actions auditable while preserving least-privilege semantics.
+## Trust and delegation
+- Trust registries default to in-memory stores but can be backed by Postgres via `internal/storage.PGTrustRegistry`.
+- Verification enforces delegation depth and trusted issuer checks before resolving DIDs.
+- Agents/delegations maintain least-privilege by shrinking scope and TTL at each hop.

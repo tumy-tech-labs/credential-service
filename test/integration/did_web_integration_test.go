@@ -104,7 +104,7 @@ func TestDidWebWithCompositeResolver(t *testing.T) {
 
 	// Create composite resolver with both jwk and web resolvers
 	jwkResolver := domain.NewJWKResolver()
-	
+
 	webConfig := domain.DefaultResolverConfig()
 	webConfig.AllowInsecureWeb = true
 	webResolver := domain.NewWebResolverWithConfig(webConfig)

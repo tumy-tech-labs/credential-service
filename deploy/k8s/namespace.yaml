@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: credential-service
+  labels:
+    app.kubernetes.io/name: credential-service
+    app.kubernetes.io/part-of: verifiable-credentials

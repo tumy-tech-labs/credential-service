@@ -1,0 +1,42 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: credential-service-ingress
+  namespace: credential-service
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - issuer.example.com
+    - verifier.example.com
+    secretName: credential-service-tls
+  rules:
+  # Issuer API
+  - host: issuer.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: credential-issuer
+            port:
+              number: 8080
+  
+  # Verifier & Gateway API
+  - host: verifier.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: credential-verifier
+            port:
+              number: 8081

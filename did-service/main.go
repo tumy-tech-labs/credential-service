@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joho/godotenv"
-	
-	"github.com/bradtumy/credential-service/internal/httpx"
+
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/logging"
 )
 
@@ -34,7 +34,7 @@ func main() {
 	routes := InitializeRoutes()
 
 	// Apply standard middleware chain with audit logging
-	handler := httpx.StandardMiddlewareChain()(routes)
+	handler := httpserver.StandardMiddlewareChain()(routes)
 
 	// Start the server
 	port := os.Getenv("PORT")

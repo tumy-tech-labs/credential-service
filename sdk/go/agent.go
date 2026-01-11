@@ -102,8 +102,8 @@ func (a *AgentClient) CallAuthorized(ctx context.Context, session *AgentSession,
 		}
 	}
 
-	req := GatewayAuthorizeRequest{Credentials: []string{session.ParentToken, session.AccessToken}, WantSyntheticJWT: true}
-	decision, err := a.SDK.GatewayAuthorize(ctx, req)
+	req := AuthorizeRequest{Credentials: []string{session.ParentToken, session.AccessToken}, WantSyntheticJWT: true}
+	decision, err := a.SDK.Authorize(ctx, req)
 	if err != nil {
 		return nil, err
 	}

@@ -15,7 +15,7 @@ import (
 
 	"github.com/bradtumy/credential-service/internal/config"
 	"github.com/bradtumy/credential-service/internal/domain"
-	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/keystore"
 	"github.com/bradtumy/credential-service/internal/metrics"
 )
@@ -46,7 +46,7 @@ func TestVerifierIntegration(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	httpx.RegisterVerifierRoutes(mux, resolver, registry, cfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
+	httpserver.RegisterVerifierRoutes(mux, resolver, registry, cfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
 
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
@@ -56,7 +56,7 @@ func TestVerifierIntegration(t *testing.T) {
 		t.Fatalf("issue credential: %v", err)
 	}
 
-	reqBody := httpx.VerifyRequest{Credential: token, ExpectedAudience: "example-api"}
+	reqBody := httpserver.VerifyRequest{Credential: token, ExpectedAudience: "example-api"}
 	payload, _ := json.Marshal(reqBody)
 
 	resp, err := http.Post(ts.URL+"/v1/credentials/verify", "application/json", bytes.NewReader(payload))
@@ -69,7 +69,7 @@ func TestVerifierIntegration(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var verifyResp httpx.VerifyResponse
+	var verifyResp httpserver.VerifyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&verifyResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestVerifierIntegrationRejectsTamperedToken(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	httpx.RegisterVerifierRoutes(mux, resolver, registry, cfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
+	httpserver.RegisterVerifierRoutes(mux, resolver, registry, cfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
 
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
@@ -115,7 +115,7 @@ func TestVerifierIntegrationRejectsTamperedToken(t *testing.T) {
 	parts[2] = base64.RawURLEncoding.EncodeToString([]byte("tamper"))
 	tampered := strings.Join(parts, ".")
 
-	reqBody := httpx.VerifyRequest{Credential: tampered}
+	reqBody := httpserver.VerifyRequest{Credential: tampered}
 	payload, _ := json.Marshal(reqBody)
 
 	resp, err := http.Post(ts.URL+"/v1/credentials/verify", "application/json", bytes.NewReader(payload))

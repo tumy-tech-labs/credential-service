@@ -1,0 +1,6 @@
+include README.md
+include LICENSE
+include CONTRIBUTING.md
+recursive-include credential_sdk *.py
+recursive-include tests *.py
+recursive-include examples *.py *.md

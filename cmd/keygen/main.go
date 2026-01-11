@@ -1,11 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 
-	"github.com/bradtumy/credential-service/internal/crypto"
+	"github.com/bradtumy/credential-service/internal/did"
 )
 
 func main() {
@@ -28,22 +29,34 @@ func main() {
 	}
 
 	// Generate the DID and key pair
-	keypair, err := crypto.GenerateDIDJWK(*algorithm)
+	doc, err := did.NewDIDJWKWithAlg(*algorithm)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating DID: %v\n", err)
 		os.Exit(1)
 	}
 
+	key, err := doc.CurrentKey()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error extracting current key: %v\n", err)
+		os.Exit(1)
+	}
+
+	publicJWK, err := json.Marshal(key.PublicJWK)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding public JWK: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Always output the DID
-	fmt.Printf("DID: %s\n", keypair.DID)
-	fmt.Printf("Algorithm: %s\n", keypair.Algorithm)
-	fmt.Printf("Public JWK: %s\n", string(keypair.PublicJWK))
+	fmt.Printf("DID: %s\n", doc.DID)
+	fmt.Printf("Algorithm: %s\n", key.Algorithm)
+	fmt.Printf("Public JWK: %s\n", string(publicJWK))
 
 	// Output private key if requested
 	if !*didOnly {
 		if *output != "" {
 			// Save private key to file
-			err := os.WriteFile(*output, keypair.PrivateKeyPEM, 0600)
+			err := os.WriteFile(*output, []byte(key.PrivateKeyPEM), 0600)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing private key to file: %v\n", err)
 				os.Exit(1)
@@ -52,13 +65,13 @@ func main() {
 			fmt.Println("\nKeep this file secure! It can be used to sign credentials as this DID.")
 		} else {
 			// Output private key to stdout
-			fmt.Printf("\nPrivate Key (PEM format):\n%s\n", string(keypair.PrivateKeyPEM))
+			fmt.Printf("\nPrivate Key (PEM format):\n%s\n", key.PrivateKeyPEM)
 			fmt.Println("⚠️  Keep this private key secure! It can be used to sign credentials as this DID.")
 		}
 	}
 
 	fmt.Println("\nYou can now use this DID in credential issuance requests:")
-	fmt.Printf("  subject_did: \"%s\"\n", keypair.DID)
+	fmt.Printf("  subject_did: \"%s\"\n", doc.DID)
 }
 
 func printUsage() {

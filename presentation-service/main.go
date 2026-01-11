@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	
-	"github.com/bradtumy/credential-service/internal/httpx"
+
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/logging"
 )
 
@@ -28,7 +28,7 @@ func main() {
 	}
 
 	// Apply standard middleware chain with comprehensive audit logging
-	handler := httpx.StandardMiddlewareChain()(routes)
+	handler := httpserver.StandardMiddlewareChain()(routes)
 
 	// Start HTTP server
 	log.Printf("Presentation Service running on port %s\n", port)

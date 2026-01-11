@@ -1,0 +1,9 @@
+go 1.23.1
+
+use (
+        .
+        ./sdk/go
+        ./examples/sdk-go/sd-jwt
+        ./examples/sdk-go/sd-jwt2
+        ./examples/go/killer-demo
+)

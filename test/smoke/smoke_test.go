@@ -12,7 +12,7 @@ import (
 
 	"github.com/bradtumy/credential-service/internal/config"
 	"github.com/bradtumy/credential-service/internal/domain"
-	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/keystore"
 	"github.com/bradtumy/credential-service/internal/metrics"
 )
@@ -21,7 +21,7 @@ func TestSmokeFlow(t *testing.T) {
 	issuerCfg := config.IssuerConfig{HTTPPort: "8080", DefaultTenantID: "tenant-1"}
 	issuerStore := keystore.NewMemoryKeyStore()
 	issuerMux := http.NewServeMux()
-	httpx.RegisterIssuerRoutes(issuerMux, issuerStore, issuerCfg, nil)
+	httpserver.RegisterIssuerRoutes(issuerMux, issuerStore, issuerCfg, nil)
 	issuerServer := httptest.NewServer(issuerMux)
 	t.Cleanup(issuerServer.Close)
 
@@ -34,7 +34,7 @@ func TestSmokeFlow(t *testing.T) {
 		t.Fatalf("issuer did: %v", err)
 	}
 
-	parentCred := issueCredential(t, issuerServer.URL+"/v1/credentials/issue", httpx.IssueRequest{
+	parentCred := issueCredential(t, issuerServer.URL+"/v1/credentials/issue", httpserver.IssueRequest{
 		SubjectDID: "did:example:parent",
 		TTLSeconds: int64((5 * time.Minute).Seconds()),
 		Claims: map[string]interface{}{
@@ -43,7 +43,7 @@ func TestSmokeFlow(t *testing.T) {
 		},
 	})
 
-	delegated := delegateCredential(t, issuerServer.URL+"/v1/credentials/delegate", httpx.DelegateRequest{
+	delegated := delegateCredential(t, issuerServer.URL+"/v1/credentials/delegate", httpserver.DelegateRequest{
 		ParentCredential: parentCred,
 		DelegateDID:      "did:example:agent",
 		Scope:            []string{"read"},
@@ -63,8 +63,8 @@ func TestSmokeFlow(t *testing.T) {
 	}
 
 	verifierMux := http.NewServeMux()
-	httpx.RegisterVerifierRoutes(verifierMux, resolver, registry, issuerCfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
-	httpx.RegisterGatewayRoutes(verifierMux, &httpx.GatewayConfig{
+	httpserver.RegisterVerifierRoutes(verifierMux, resolver, registry, issuerCfg.DefaultTenantID, &metrics.NoopVerifierMetrics{}, time.Now)
+	httpserver.RegisterGatewayRoutes(verifierMux, &httpserver.GatewayConfig{
 		Resolver:        resolver,
 		Registry:        registry,
 		DefaultTenantID: issuerCfg.DefaultTenantID,
@@ -75,7 +75,7 @@ func TestSmokeFlow(t *testing.T) {
 	verifierServer := httptest.NewServer(verifierMux)
 	t.Cleanup(verifierServer.Close)
 
-	authzPayload := httpx.GatewayAuthorizeRequest{
+	authzPayload := httpserver.GatewayAuthorizeRequest{
 		Credentials:      []string{parentCred, delegated},
 		ExpectedAudience: "sample-api",
 		WantSyntheticJWT: true,
@@ -94,7 +94,7 @@ func TestSmokeFlow(t *testing.T) {
 		t.Fatalf("expected 200 from gateway, got %d", resp.StatusCode)
 	}
 
-	var authzResp httpx.GatewayAuthorizeResponse
+	var authzResp httpserver.GatewayAuthorizeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&authzResp); err != nil {
 		t.Fatalf("decode gateway response: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestSmokeFlow(t *testing.T) {
 	}
 }
 
-func issueCredential(t *testing.T, url string, req httpx.IssueRequest) string {
+func issueCredential(t *testing.T, url string, req httpserver.IssueRequest) string {
 	t.Helper()
 	payload, _ := json.Marshal(req)
 	resp, err := http.Post(url, "application/json", bytes.NewReader(payload))
@@ -121,14 +121,14 @@ func issueCredential(t *testing.T, url string, req httpx.IssueRequest) string {
 		t.Fatalf("issue credential status: %d", resp.StatusCode)
 	}
 
-	var issueResp httpx.IssueResponse
+	var issueResp httpserver.IssueResponse
 	if err := json.NewDecoder(resp.Body).Decode(&issueResp); err != nil {
 		t.Fatalf("decode issue response: %v", err)
 	}
 	return issueResp.Credential
 }
 
-func delegateCredential(t *testing.T, url string, req httpx.DelegateRequest) string {
+func delegateCredential(t *testing.T, url string, req httpserver.DelegateRequest) string {
 	t.Helper()
 	payload, _ := json.Marshal(req)
 	resp, err := http.Post(url, "application/json", bytes.NewReader(payload))
@@ -141,7 +141,7 @@ func delegateCredential(t *testing.T, url string, req httpx.DelegateRequest) str
 		t.Fatalf("delegate status: %d", resp.StatusCode)
 	}
 
-	var issueResp httpx.IssueResponse
+	var issueResp httpserver.IssueResponse
 	if err := json.NewDecoder(resp.Body).Decode(&issueResp); err != nil {
 		t.Fatalf("decode delegate response: %v", err)
 	}

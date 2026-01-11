@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/bradtumy/credential-service/internal/config"
-	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/keystore"
 )
 
@@ -17,12 +17,12 @@ func TestIssuerIntegration(t *testing.T) {
 	store := keystore.NewMemoryKeyStore()
 	cfg := config.LoadIssuerConfigFromEnv()
 	mux := http.NewServeMux()
-	httpx.RegisterIssuerRoutes(mux, store, cfg, nil)
+	httpserver.RegisterIssuerRoutes(mux, store, cfg, nil)
 
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 
-	reqBody := httpx.IssueRequest{
+	reqBody := httpserver.IssueRequest{
 		SubjectDID: "did:jwk:subject-123",
 		TTLSeconds: int64((10 * time.Minute).Seconds()),
 		Claims:     map[string]interface{}{"scope": "test"},
@@ -42,7 +42,7 @@ func TestIssuerIntegration(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var issueResp httpx.IssueResponse
+	var issueResp httpserver.IssueResponse
 	if err := json.NewDecoder(resp.Body).Decode(&issueResp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}

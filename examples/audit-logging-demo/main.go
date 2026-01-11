@@ -10,7 +10,7 @@ import (
 
 	"github.com/bradtumy/credential-service/internal/config"
 	"github.com/bradtumy/credential-service/internal/domain"
-	"github.com/bradtumy/credential-service/internal/httpx"
+	"github.com/bradtumy/credential-service/internal/httpserver"
 	"github.com/bradtumy/credential-service/internal/keystore"
 	"github.com/bradtumy/credential-service/internal/logging"
 	"github.com/bradtumy/credential-service/internal/tenant"
@@ -36,11 +36,11 @@ func main() {
 
 	// Wire routes
 	mux := http.NewServeMux()
-	httpx.RegisterIssuerRoutes(mux, store, cfg, nil)
-	httpx.RegisterHealthRoutes(mux, nil)
+	httpserver.RegisterIssuerRoutes(mux, store, cfg, nil)
+	httpserver.RegisterHealthRoutes(mux, nil)
 
 	// Apply comprehensive middleware chain (correlation IDs, audit, security headers)
-	handler := httpx.StandardMiddlewareChain()(mux)
+	handler := httpserver.StandardMiddlewareChain()(mux)
 
 	// Start demo server
 	srv := &http.Server{Addr: ":" + cfg.HTTPPort, Handler: handler}
@@ -82,7 +82,7 @@ func demoAuditLogging(port string) {
 
 	// 2) Issue credential (sensitive) → audited
 	fmt.Println("\n2) Credential issuance (audited)")
-	issueReq := httpx.IssueRequest{
+	issueReq := httpserver.IssueRequest{
 		SubjectDID: "did:jwk:demo-subject",
 		TTLSeconds: 1800,
 		Claims: map[string]interface{}{
@@ -101,7 +101,7 @@ func demoAuditLogging(port string) {
 	} else {
 		fmt.Printf("   ✅ Issuance status: %d\n", resp.StatusCode)
 		if resp.StatusCode == http.StatusOK {
-			var out httpx.IssueResponse
+			var out httpserver.IssueResponse
 			_ = json.NewDecoder(resp.Body).Decode(&out)
 			fmt.Println("   📄 Credential issued")
 		}

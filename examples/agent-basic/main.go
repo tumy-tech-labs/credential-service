@@ -10,7 +10,12 @@ import (
 )
 
 func main() {
-	client := &sdk.Client{BaseURL: "http://localhost:8080", HTTPClient: &http.Client{Timeout: 5 * time.Second}}
+	client := &sdk.Client{
+		IssuerURL:   "http://localhost:8080",
+		VerifierURL: "http://localhost:8081",
+		GatewayURL:  "http://localhost:8081",
+		HTTPClient:  &http.Client{Timeout: 5 * time.Second},
+	}
 	agent := &sdk.AgentClient{SDK: client}
 
 	parent := ""

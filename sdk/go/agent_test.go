@@ -33,7 +33,7 @@ func TestAgentSessionLifecycle(t *testing.T) {
 			resp := DelegateResponse{Credential: buildToken(t, credentialPayload{Subject: "did:agent", ExpiresAt: now.Add(30 * time.Minute), Claims: map[string]interface{}{"scope": []string{"read"}}})}
 			_ = json.NewEncoder(w).Encode(resp)
 		case "/v1/gateway/authorize":
-			_ = json.NewEncoder(w).Encode(GatewayAuthorizeResponse{Allowed: true, SyntheticJWT: "synthetic.jwt.token"})
+			_ = json.NewEncoder(w).Encode(AuthorizeResponse{Allowed: true, SyntheticJWT: "synthetic.jwt.token"})
 		case "/resource":
 			if got := r.Header.Get("Authorization"); got != "Bearer synthetic.jwt.token" {
 				t.Fatalf("unexpected auth header: %s", got)
@@ -46,7 +46,7 @@ func TestAgentSessionLifecycle(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := &Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := &Client{IssuerURL: server.URL, VerifierURL: server.URL, GatewayURL: server.URL, HTTPClient: server.Client()}
 	agent := &AgentClient{SDK: client}
 
 	session, err := agent.StartAgentSession(context.Background(), parentToken, "did:agent", []string{"read"}, 45*time.Minute)
@@ -78,7 +78,7 @@ func TestAgentRefreshOnExpiry(t *testing.T) {
 			resp := DelegateResponse{Credential: buildToken(t, credentialPayload{Subject: "did:agent", ExpiresAt: now.Add(time.Duration(refreshCount) * 10 * time.Minute), Claims: map[string]interface{}{"scope": []string{"read"}}})}
 			_ = json.NewEncoder(w).Encode(resp)
 		case "/v1/gateway/authorize":
-			_ = json.NewEncoder(w).Encode(GatewayAuthorizeResponse{Allowed: true, SyntheticJWT: "synthetic.jwt.token"})
+			_ = json.NewEncoder(w).Encode(AuthorizeResponse{Allowed: true, SyntheticJWT: "synthetic.jwt.token"})
 		case "/resource":
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -87,7 +87,7 @@ func TestAgentRefreshOnExpiry(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := &Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := &Client{IssuerURL: server.URL, VerifierURL: server.URL, GatewayURL: server.URL, HTTPClient: server.Client()}
 	agent := &AgentClient{SDK: client}
 
 	session, err := agent.StartAgentSession(context.Background(), parentToken, "did:agent", []string{"read"}, 5*time.Minute)
