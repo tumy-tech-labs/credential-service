@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	sdk "github.com/bradtumy/credential-service/sdk-go"
+	sdk "github.com/bradtumy/credential-service/sdk/go"
 	"log"
 	"os"
 )

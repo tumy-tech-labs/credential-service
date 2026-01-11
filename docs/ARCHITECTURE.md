@@ -19,7 +19,7 @@ internal/            # shared libraries (not importable by SDKs)
   httpserver/        # HTTP handlers, middleware, and route registration
   keystore/          # pluggable keystore backends
   metrics/, policy/, ratelimit/, storage/, tenant/ ...
-sdk/go               # Go SDK (module path: github.com/bradtumy/credential-service/sdk-go)
+sdk/go               # Go SDK (module path: github.com/bradtumy/credential-service/sdk/go)
 sdk/node             # Node SDK
 ```
 

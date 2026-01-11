@@ -1,3 +1,3 @@
-module github.com/bradtumy/credential-service/sdk-go
+module github.com/bradtumy/credential-service/sdk/go
 
 go 1.22

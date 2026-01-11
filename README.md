@@ -49,10 +49,11 @@ If you want to see the raw responses, the script prints the authorize and deny p
 - You need long-lived bearer tokens without rotation—short TTLs and delegation limits are core to the product.
 
 ## SDKs & examples
-- **Go SDK**: `github.com/bradtumy/credential-service/sdk-go` with both low-level and new high-level helpers.
+- **Go SDK**: module `github.com/bradtumy/credential-service/sdk/go` (source: `sdk/go`) with low-level and high-level helpers.
+  - Import: `import sdk "github.com/bradtumy/credential-service/sdk/go"`
   - Quick local client: `client := sdk.NewMagicLocalClient()`
   - See `examples/go/killer-demo` for a minimal end-to-end call chain.
-- **Node SDK**: see [`sdk/node`](sdk/node/README.md) for parity endpoints.
+- **Node SDK**: source at `sdk/node` — see [`sdk/node`](sdk/node/README.md) for usage and examples.
 
 ## Advanced topics (opt-in)
 - [Gateway authorize API](docs/GATEWAY.md) — request/response shapes and error codes.

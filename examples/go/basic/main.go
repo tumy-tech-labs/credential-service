@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	sdk "github.com/bradtumy/credential-service/sdk-go"
+	sdk "github.com/bradtumy/credential-service/sdk/go"
 )
 
 func main() {

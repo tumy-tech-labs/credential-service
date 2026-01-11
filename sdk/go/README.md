@@ -5,7 +5,7 @@ A first-class Go client for issuing, verifying, and authorizing credentials with
 ## Installation
 
 ```bash
-go get github.com/bradtumy/credential-service/sdk-go
+go get github.com/bradtumy/credential-service/sdk/go
 ```
 
 ## Quickstart
@@ -17,7 +17,7 @@ import (
         "context"
         "log"
 
-        sdk "github.com/bradtumy/credential-service/sdk-go"
+        sdk "github.com/bradtumy/credential-service/sdk/go"
 )
 
 func main() {
