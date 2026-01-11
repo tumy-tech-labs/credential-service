@@ -17,6 +17,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Production configuration guidance and API overview documentation.
 - Lightweight smoke test suite for rapid validation.
 
+## v0.0.5 - 2026-01-11
+
+### Changed
+- Consolidate Go SDK module path to `github.com/bradtumy/credential-service/sdk/go` and update examples and documentation.
+	- Updated `sdk/go/go.mod` module path and `sdk/go/README.md`.
+	- Adjusted example `go.mod` replacement directives and example imports to use `sdk/go`.
+	- Updated top-level `README.md` and `docs/ARCHITECTURE.md` to reflect consolidated SDK locations.
+
 ## [Day 10]
 ### Added
 - API response versioning, health/readiness probes, and OpenAPI spec.
